@@ -1,0 +1,60 @@
+<mujoco model="rx200">
+  <compiler angle="radian"/>
+
+  <asset>
+    <mesh name="rx200_1_base" content_type="model/stl" file="rx200_1_base.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_2_shoulder" content_type="model/stl" file="rx200_2_shoulder.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_3_upper_arm" content_type="model/stl" file="rx200_3_upper_arm.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_4_forearm" content_type="model/stl" file="rx200_4_forearm.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_5_wrist" content_type="model/stl" file="rx200_5_wrist.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_6_gripper" content_type="model/stl" file="rx200_6_gripper.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_7_gripper_prop" content_type="model/stl" file="rx200_7_gripper_prop.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_8_gripper_bar" content_type="model/stl" file="rx200_8_gripper_bar.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="rx200_9_gripper_finger" content_type="model/stl" file="rx200_9_gripper_finger.stl" scale="0.001 0.001 0.001"/>
+  </asset>
+
+  <worldbody>
+    <geom quat="0.707107 0 0 -0.707107" type="mesh" mesh="rx200_1_base"/>
+    <body name="rx200/shoulder_link" pos="0 0 0.06566">
+      <inertial pos="-8.53644e-05 1.7369e-05 0.0132005" quat="0.00551577 0.707173 0.0055144 0.706997" mass="0.257774" diaginertia="0.000471107 0.000442793 0.0002663"/>
+      <joint name="waist" pos="0 0 0" axis="0 0 1" range="-3.14158 3.14158" actuatorfrcrange="-8 8" frictionloss="0.1"/>
+      <geom pos="0 0 0.0015" quat="0.707107 0 0 -0.707107" type="mesh" mesh="rx200_2_shoulder"/>
+      <body name="rx200/upper_arm_link" pos="0 0 0.03891">
+        <inertial pos="0.0119513 -0.000116923 0.13943" quat="0.997528 0.0699303 -0.000209782 -0.00692919" mass="0.297782" diaginertia="0.00171001 0.00166103 0.000117759"/>
+        <joint name="shoulder" pos="0 0 0" axis="0 1 0" range="-1.88496 1.97222" actuatorfrcrange="-18 18" frictionloss="0.1"/>
+        <geom quat="0.707107 0 0 0.707107" type="mesh" mesh="rx200_3_upper_arm"/>
+        <body name="rx200/forearm_link" pos="0.05 0 0.2">
+          <inertial pos="0.114745 -9.38376e-05 0" quat="0.500461 0.499538 -0.500461 0.499538" mass="0.258863" diaginertia="0.001076 0.001055 6.42066e-05"/>
+          <joint name="elbow" pos="0 0 0" axis="0 1 0" range="-1.88496 1.62316" actuatorfrcrange="-13 13" frictionloss="0.1"/>
+          <geom pos="0 0 0" quat="0.707107 0 0 0.707107" type="mesh" mesh="rx200_4_forearm"/>
+          <body name="rx200/wrist_link" pos="0.2 0 0">
+            <inertial pos="0.04236 -1.0411e-05 0.010577" quat="0.608721 0.363497 -0.359175 0.606895" mass="0.084957" diaginertia="3.29057e-05 3.082e-05 2.68343e-05"/>
+            <joint name="wrist_angle" pos="0 0 0" axis="0 1 0" range="-1.74533 2.14675" actuatorfrcrange="-5 5" frictionloss="0.1"/>
+            <geom quat="0.707107 0 0 0.707107" type="mesh" mesh="rx200_5_wrist"/>
+            <body name="rx200/gripper_link" pos="0.065 0 0">
+              <inertial pos="0.0191705 -0.00915266 0.018826" quat="0.717793 0.0865302 -0.464102 0.511757" mass="0.110084" diaginertia="0.00309262 0.00307833 0.0030495"/>
+              <joint name="wrist_rotate" pos="0 0 0" axis="1 0 0" range="-3.14158 3.14158" actuatorfrcrange="-1 1" frictionloss="0.1"/>
+              <geom pos="-0.02 0 0" quat="0.707107 0 0 0.707107" type="mesh" mesh="rx200_6_gripper"/>
+              <geom pos="-0.02 0 0" quat="0.707107 0 0 0.707107" type="mesh" mesh="rx200_8_gripper_bar"/>
+              <body name="rx200/gripper_prop_link" pos="0.0485 0 0">
+                <inertial pos="0.000846 -1.933e-06 4.2e-05" quat="0.654786 -0.266277 -0.265707 0.655555" mass="0.00434" diaginertia="1.1156e-06 9.02926e-07 2.63673e-07"/>
+                <joint name="gripper" pos="0 0 0" axis="1 0 0" actuatorfrcrange="-1 1" frictionloss="0.1"/>
+                <geom pos="-0.0685 0 0" quat="0.707107 0 0 0.707107" type="mesh" mesh="rx200_7_gripper_prop"/>
+              </body>
+              <body name="rx200/left_finger_link" pos="0.066 0 0">
+                <inertial pos="0.013816 0 0" quat="0.705384 0.705384 -0.0493271 -0.0493271" mass="0.016246" diaginertia="4.79509e-06 3.7467e-06 1.48651e-06"/>
+                <joint name="left_finger" pos="0 0 0" axis="0 1 0" type="slide" range="0.015 0.037" actuatorfrcrange="-5 5" frictionloss="0.1"/>
+                <geom pos="0 0.005 0" quat="0 0 0 -1" type="mesh" mesh="rx200_9_gripper_finger"/>
+              </body>
+              <body name="rx200/right_finger_link" pos="0.066 0 0">
+                <inertial pos="0.013816 0 0" quat="0.705384 0.705384 0.0493271 0.0493271" mass="0.016246" diaginertia="4.79509e-06 3.7467e-06 1.48651e-06"/>
+                <joint name="right_finger" pos="0 0 0" axis="0 1 0" type="slide" range="-0.037 -0.015" actuatorfrcrange="-5 5" frictionloss="0.1"/>
+                <geom pos="0 -0.005 0" quat="0 0 1 0" type="mesh" mesh="rx200_9_gripper_finger"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>
