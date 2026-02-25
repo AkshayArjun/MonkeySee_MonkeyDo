@@ -1,0 +1,40 @@
+<mujoco model="mocap_scene">
+  <compiler angle="radian" meshdir="."/>
+  <option timestep="0.01" gravity="0 0 -9.81" />
+  
+  <include file="rx200_mujoco.xml"/>
+
+  <visual>
+    <global offwidth="1920" offheight="1080"/>
+  </visual>
+
+  <worldbody>
+    <light pos="0 0.5 1.5" dir="0 -0.2 -1" directional="true" castshadow="true"/>
+    <geom name="floor" type="plane" size="2 2 0.05" rgba="0.8 0.9 0.8 1" mass="0" />
+    
+    <!-- Table -->
+    <body name="table" pos="0.3 0 0.2">
+      <geom type="box" size="0.2 0.4 0.2" rgba="0.6 0.4 0.2 1" mass="0"/>
+    </body>
+
+    <!-- Physics Blocks for interaction -->
+    <body name="block1" pos="0.3 0 0.45">
+      <freejoint/>
+      <geom type="box" size="0.03 0.03 0.03" rgba="1 0 0 1" mass="0.1" friction="1 0.005 0.0001"/>
+    </body>
+    <body name="block2" pos="0.3 0.1 0.45">
+      <freejoint/>
+      <geom type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" mass="0.1" friction="1 0.005 0.0001"/>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="motor_waist" joint="waist" ctrlrange="-3.14 3.14" kp="50" />
+    <position name="motor_shoulder" joint="shoulder" ctrlrange="-1.88 1.97" kp="50" />
+    <position name="motor_elbow" joint="elbow" ctrlrange="-1.88 1.62" kp="50" />
+    <position name="motor_wrist_angle" joint="wrist_angle" ctrlrange="-1.74 2.14" kp="50" />
+    <position name="motor_wrist_rotate" joint="wrist_rotate" ctrlrange="-3.14 3.14" kp="50" />
+    <position name="motor_left_finger" joint="left_finger" ctrlrange="0.015 0.037" kp="500" />
+    <position name="motor_right_finger" joint="right_finger" ctrlrange="-0.037 -0.015" kp="500" />
+  </actuator>
+</mujoco>
