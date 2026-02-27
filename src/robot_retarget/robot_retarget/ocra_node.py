@@ -11,9 +11,9 @@ from . import rx200_kinematics as rx_kine
 
 from scipy.optimize import minimize
 
-LOOP_RATE = 10
-ALPHA = 0.90
-BETA = 0.10
+LOOP_RATE = 25
+ALPHA = 0.67
+BETA = 0.33
 
 JOINT_LIMITS = [
     (-3.1416, 3.1416),   # Waist
@@ -38,7 +38,7 @@ class OCRANode(Node):
         )
 
         self.robot_sub = self.create_subscription(
-            JointGroupCommand,
+            JointState,
             '/rx200/joint_states',
             self.robot_state_callback,
             10,
@@ -96,10 +96,10 @@ class OCRANode(Node):
             method='SLSQP',
             jac=True,
             bounds=JOINT_LIMITS,
-            options={'maxiter': 10, 'ftol': 1e-4, 'disp': True}  # was maxiter=5!
+            options={'maxiter': 25, 'ftol': 1e-4, 'disp': True}  # was maxiter=5!
         )
 
-        if res.success or res.status == 9:  # status 9 = iteration limit but still improved
+        if res.success or 'iteration' in res.message.lower():  # status 9 = iteration limit but still improved
             self.last_solution = res.x
             cmd_msg = JointGroupCommand()
             cmd_msg.name = "arm"

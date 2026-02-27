@@ -112,7 +112,7 @@ def forward_kinematics(joint_angles):
 @jit
 def ocra_loss(joint_angles, target_flat, weights):
     #joint angles : [5]
-    #target_flat : flattened array of [shoulde[3] relbow_pos(3), hand_pos(3), hand_rot(4)]
+    #target_flat : flattened array of [shoulder[3] elbow_pos(3), hand_pos(3), hand_rot(4)]
     #weights : alpha, beta for the loss terms
     
     t_shoulder = target_flat[:3]
@@ -120,11 +120,17 @@ def ocra_loss(joint_angles, target_flat, weights):
     t_hand = target_flat[6:9]
     t_quat = target_flat[9:13]
 
+    human_seg1 = jnp.linalg.norm(t_elbow - t_shoulder)
+    human_seg2 = jnp.linalg.norm(t_hand - t_elbow)
+
     alpha = weights[0]
     beta = weights[1]
     
     ROBOT_BASE = jnp.array([0.0, 0.0, 0.0])  # Assuming the robot base is at the origin
     r_elbow, r_hand, r_rot = forward_kinematics(joint_angles)
+
+    robot_seg1 = jnp.linalg.norm(r_elbow - ROBOT_BASE)
+    robot_seg2 = jnp.linalg.norm(r_hand - r_elbow)
     
     robot_chain = jnp.stack ([ROBOT_BASE, r_elbow, r_hand])
     human_chain = jnp.stack ([t_shoulder, t_elbow, t_hand])
@@ -135,8 +141,10 @@ def ocra_loss(joint_angles, target_flat, weights):
     d_r_hnd = get_min_distance_to_chain(r_hand, human_chain)
     d_r_elb = get_min_distance_to_chain(r_elbow, human_chain)
 
+    ell = (human_seg1 + human_seg2)  + (robot_seg1 + robot_seg2)
+
     #this is the skeletal error
-    skel_err = (d_h_elb**2 + d_h_hnd**2) + (d_r_elb**2 + d_r_hnd**2)
+    skel_err = ((d_h_elb + d_h_hnd) + (d_r_elb + d_r_hnd))/(ell + 1e-8)
     
     #now orrientation error acc to ocra
     tr = jnp.trace(r_rot)
@@ -147,11 +155,25 @@ def ocra_loss(joint_angles, target_flat, weights):
     z = (r_rot[1, 0] - r_rot[0, 1]) / s
     r_quat = jnp.array([x, y, z, w])
     
-    # Error = 1 - <q1, q2>^2
-    dot_prod = jnp.dot(r_quat, t_quat)
-    orient_err = 1.0 - (dot_prod ** 2)
-    
-    return alpha * skel_err + beta * orient_err
+    # relative rotation
+    t_quat_conj = jnp.array([-t_quat[0], -t_quat[1], -t_quat[2], t_quat[3]])
+
+    tx, ty, tz, tw = t_quat_conj
+    rx, ry, rz, rw = r_quat
+
+    Qd = jnp.array([
+    rw*tx + rx*tw + ry*tz - rz*ty,
+    rw*ty - rx*tz + ry*tw + rz*tx,
+    rw*tz + rx*ty - ry*tx + rz*tw,
+    rw*tw - rx*tx - ry*ty - rz*tz
+    ])
+
+    # ── Extract angle and normalize ────────────────────────────────
+    theta_d    = 2.0 * jnp.arccos(jnp.clip(jnp.abs(Qd[3]), 0.0, 1.0))
+    orient_err = theta_d / jnp.pi   # ∈ [0, 1], linear in angle
+
+    # ── Final loss (paper eq. 1: α·ϵs² + β·ϵo²) ──────────────────
+    return alpha * (skel_err ** 2) + beta * (orient_err ** 2)
 
 loss_and_grad_fn = value_and_grad(ocra_loss)
 
