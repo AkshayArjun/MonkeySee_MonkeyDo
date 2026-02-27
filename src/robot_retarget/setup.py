@@ -11,12 +11,18 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=[
+        'setuptools',
+        'jax',       # Required for the optimization math
+        'jaxlib',    # Required for JAX runtime
+        'scipy',     # Required for the SLSQP solver
+        'numpy',     # Required for data handling
+    ],
     zip_safe=True,
     maintainer='focas',
     maintainer_email='aakshay1114@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='OCRA-based human-to-robot retargeting for the RX200 arm using JAX.',
+    license='Apache-2.0',
     extras_require={
         'test': [
             'pytest',
@@ -24,6 +30,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'ocra_node = robot_retarget.ocra_node:main',
         ],
     },
 )

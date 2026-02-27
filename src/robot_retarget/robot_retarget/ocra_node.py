@@ -1,19 +1,19 @@
 import rclpy
-import rclpy.node as Node
+from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseArray
-from std_msgs.msg import Float64MultiArray
+from interbotix_xs_msgs.msg import JointGroupCommand
 import numpy as np
-import time
 
-import rx200_kinematics as rx_kine
+from . import rx200_kinematics as rx_kine
+
 from scipy.optimize import minimize
 
-LOOP_RATE = 25
-ALPHA = 0.67
-BETA = 0.33
+LOOP_RATE = 10
+ALPHA = 0.90
+BETA = 0.10
 
 JOINT_LIMITS = [
     (-3.1416, 3.1416),   # Waist
@@ -34,19 +34,19 @@ class OCRANode(Node):
             '/human/skeletal_data',
             self.human_callback,
             1,
-            callback_group = self.cb_group
+            callback_group = self.cb
         )
 
         self.robot_sub = self.create_subscription(
-            JointState,
+            JointGroupCommand,
             '/rx200/joint_states',
             self.robot_state_callback,
             10,
-            callback_group = self.cb_group
+            callback_group = self.cb
         )
 
         self.cmd_pub = self.create_publisher(
-            Float64MultiArray,
+            JointGroupCommand,
             '/rx200/commands/joint_group',
             10
         )
@@ -57,55 +57,56 @@ class OCRANode(Node):
         self.timer = self.create_timer(
             1/LOOP_RATE,
             self.control_loop,
-            callback_group = self.cb_group
+            callback_group = self.cb
         )
 
         self.get_logger().info("OCRA Controller Node Initialized, waiting for human data...")
     
     def robot_state_callback(self, msg):
         self.current_joints = np.array(msg.position[:5])
-    
+        
     def human_callback(self, msg):
         if len(msg.poses) < 3:
             self.get_logger().warn("Received skeletal data with less than 3 keypoints, ignoring.")
             return
         
-        # Extract shoulder, elbow, hand positions and hand rotation (quaternion)
         shoulder = np.array([msg.poses[0].position.x, msg.poses[0].position.y, msg.poses[0].position.z])
-        elbow = np.array([msg.poses[1].position.x, msg.poses[1].position.y, msg.poses[1].position.z])
-        hand = np.array([msg.poses[2].position.x, msg.poses[2].position.y, msg.poses[2].position.z])
+        elbow    = np.array([msg.poses[1].position.x, msg.poses[1].position.y, msg.poses[1].position.z])
+        hand     = np.array([msg.poses[2].position.x, msg.poses[2].position.y, msg.poses[2].position.z])
         
         quat = np.array([
-            msg.poses[2].orientation.x, 
-            msg.poses[2].orientation.y, 
-            msg.poses[2].orientation.z, 
+            msg.poses[2].orientation.x,
+            msg.poses[2].orientation.y,
+            msg.poses[2].orientation.z,
             msg.poses[2].orientation.w])
+        quat = quat / (np.linalg.norm(quat) + 1e-8)  # normalize!
 
         self.latest_target_flat = np.concatenate([shoulder, elbow, hand, quat])
 
-        def control_loop(self):
-            if self.latest_target_flat is None:
-                return
-            
-            x0 = self.last_solution if np.any(self.last_solution) else self.current_joints
+    def control_loop(self):
+        if self.latest_target_flat is None:
+            return
 
-            res = minimize(
-                fun=rx_kine.loss_and_grad_fn,
-                x0=x0,
-                args=(self.latest_target_flat, [ALPHA, BETA]),
-                method='SLSQP',
-                jac=True, 
-                bounds=JOINT_LIMITS,
-                options={'maxiter': 5, 'ftol': 1e-3, 'disp': False}
-            )
-            
-            if res.success:
-                self.last_solution = res.x
-                cmd_msg = Float64MultiArray()
-                cmd_msg.data = res.x.tolist()
-                self.cmd_pub.publish(cmd_msg)
-            else:
-                self.get_logger().warn(f"Optimization failed: {res.message}")
+        x0 = self.last_solution  # warm-start always
+
+        res = minimize(
+            fun=rx_kine.loss_and_grad_fn,
+            x0=x0,
+            args=(self.latest_target_flat, [ALPHA, BETA]),
+            method='SLSQP',
+            jac=True,
+            bounds=JOINT_LIMITS,
+            options={'maxiter': 10, 'ftol': 1e-4, 'disp': True}  # was maxiter=5!
+        )
+
+        if res.success or res.status == 9:  # status 9 = iteration limit but still improved
+            self.last_solution = res.x
+            cmd_msg = JointGroupCommand()
+            cmd_msg.name = "arm"
+            cmd_msg.cmd= res.x.tolist()
+            self.cmd_pub.publish(cmd_msg)
+        else:
+            self.get_logger().warn(f"Optimization failed: {res.message}")
 
 def main(args=None):
     rclpy.init(args=args)
