@@ -31,6 +31,7 @@ setup(
     entry_points={
         'console_scripts': [
             'ocra_node = robot_retarget.ocra_node:main',
+            'ocra_sim_node = robot_retarget.ocra_sim_node:main',
         ],
     },
 )

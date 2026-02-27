@@ -83,7 +83,8 @@ def get_min_distance_to_chain(point, chain_joints):
     d1 = dist_point_to_segment(point, chain_joints[0], chain_joints[1])
     d2 = dist_point_to_segment(point, chain_joints[1], chain_joints[2])
 
-    return jnp.minimum(d1, d2)
+    alpha = 10.0
+    return -(1.0/alpha) * jnp.log(jnp.exp(-alpha*d1) + jnp.exp(-alpha*d2))
 
 # ======== Forward kinematics ========
 
@@ -169,7 +170,8 @@ def ocra_loss(joint_angles, target_flat, weights):
     ])
 
     # ── Extract angle and normalize ────────────────────────────────
-    theta_d    = 2.0 * jnp.arccos(jnp.clip(jnp.abs(Qd[3]), 0.0, 1.0))
+    Qd_xyz_norm = jnp.sqrt(jnp.maximum(Qd[0]**2 + Qd[1]**2 + Qd[2]**2, 1e-12))
+    theta_d     = 2.0 * jnp.arctan2(Qd_xyz_norm, jnp.abs(Qd[3]))
     orient_err = theta_d / jnp.pi   # ∈ [0, 1], linear in angle
 
     # ── Final loss (paper eq. 1: α·ϵs² + β·ϵo²) ──────────────────

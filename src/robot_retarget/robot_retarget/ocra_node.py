@@ -11,7 +11,7 @@ from . import rx200_kinematics as rx_kine
 
 from scipy.optimize import minimize
 
-LOOP_RATE = 25
+LOOP_RATE = 10
 ALPHA = 0.67
 BETA = 0.33
 
@@ -89,6 +89,11 @@ class OCRANode(Node):
 
         x0 = self.last_solution  # warm-start always
 
+        if np.allclose(x0, np.zeros(5)):
+            max_iter = 50
+        else:
+            max_iter = 10
+
         res = minimize(
             fun=rx_kine.loss_and_grad_fn,
             x0=x0,
@@ -96,10 +101,10 @@ class OCRANode(Node):
             method='SLSQP',
             jac=True,
             bounds=JOINT_LIMITS,
-            options={'maxiter': 25, 'ftol': 1e-4, 'disp': True}  # was maxiter=5!
+            options={'maxiter': max_iter, 'ftol': 1e-4, 'disp': True}  # was maxiter=5!
         )
 
-        if res.success or 'iteration' in res.message.lower():  # status 9 = iteration limit but still improved
+        if res.success or res.status == 9:  # status 9 = iteration limit but still improved
             self.last_solution = res.x
             cmd_msg = JointGroupCommand()
             cmd_msg.name = "arm"
