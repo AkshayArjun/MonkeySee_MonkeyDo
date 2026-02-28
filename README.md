@@ -27,28 +27,76 @@ camera_tracker.py  ──►  /human/skeletal_data  (geometry_msgs/PoseArray)
 
 ## Algorithm — OCRA
 
-The OCRA loss function jointly minimizes two terms:
+The loss function is minimized over joint angles `q` at each control step:
 
 ```
-L(q) = α · ε_s² + β · ε_o²
+L(q) = α · ε_s² + β · ε_o² + γ · ε_ee²
 ```
 
-**Skeleton error `ε_s`** — bidirectional chain-to-chain distance, normalized by total arm length:
+The first two terms follow the paper. The third is an addition described below.
+
+---
+
+### Skeleton Error `ε_s`
+
+Bidirectional chain-to-chain distance, normalized by total arm length:
 
 ```
-ε_s = Σ s_i + Σ t_j   /   ℓ
+ε_s = ( Σ s_i + Σ t_j ) / ℓ
 ```
 
-where `s_i` = distance from human joint `i` to robot chain, `t_j` = distance from robot joint `j` to human chain, and `ℓ` = sum of arc lengths of both chains.
+- `s_i` = distance from human joint `i` to the nearest point on the robot chain
+- `t_j` = distance from robot joint `j` to the nearest point on the human chain
+- `ℓ = (human_seg1 + human_seg2) + (robot_seg1 + robot_seg2)` — total arc length of both chains, used to normalize `ε_s` to `[0, 1]`
 
-**Orientation error `ε_o`** — axis-angle magnitude of relative end-effector rotation:
+Point-to-chain distance uses a **smooth minimum** (log-sum-exp) instead of `min()` to preserve differentiability:
+
+```python
+# smooth min over two segment distances d1, d2
+-(1/α) · log( exp(-α·d1) + exp(-α·d2) )    # α = 10
+```
+
+---
+
+### Orientation Error `ε_o`
+
+Axis-angle magnitude of the relative end-effector rotation, normalized to `[0, 1]`:
 
 ```
-Q_d  = q_robot · q_target⁻¹
-ε_o  = 2·arctan2(|xyz|, |w|) / π       # stable at identity
+Q_d  = q_robot · q_target⁻¹          # relative rotation quaternion
+ε_o  = 2 · arctan2(|xyz|, |w|) / π   # arctan2 stable at identity (no NaN)
 ```
 
-The optimizer runs **SLSQP** (Sequential Least Squares Programming) with JAX-computed analytical gradients at 10 Hz.
+`arctan2` is used instead of `arccos` because `arccos(1.0)` has undefined gradient — this was the source of NaN gradients at the identity rotation.
+
+---
+
+### End-Effector Matching Term `ε_ee` *(extension, not in paper)*
+
+The skeleton error `ε_s` is a bidirectional chain-to-chain metric — it scores low when any part of the robot chain is near any part of the human chain. In practice this creates a degenerate local minimum where the robot EE parks near the human **elbow** (satisfying the chain distance term) while the human **hand** is ignored entirely.
+
+To fix this, an explicit EE correspondence term is added:
+
+```python
+hand_err = ‖ r_hand - t_hand ‖ / (ℓ + 1e-8)
+```
+
+This directly penalizes the Euclidean distance between the robot end-effector and the human hand position, forcing the optimizer to treat hand-to-EE correspondence as a hard goal rather than an incidental benefit of chain alignment. Normalized by `ℓ` to stay on the same scale as `ε_s`.
+
+```python
+# Full loss in rx200_kinematics.py
+return alpha * (skel_err ** 2) + beta * (orient_err ** 2) + gamma * (hand_err ** 2)
+```
+
+---
+
+### Optimization
+
+SLSQP (Sequential Least Squares Programming) via `scipy.optimize.minimize`, with analytical gradients computed by JAX `value_and_grad`. Warm-started from the previous solution after the first solve.
+
+```python
+loss_and_grad_fn = jax.value_and_grad(ocra_loss)
+```
 
 ---
 
@@ -136,8 +184,9 @@ Drag to rotate, scroll to zoom. EE glow: 🟢 good / 🟡 ok / 🔴 bad loss.
 | Parameter | Location | Value | Description |
 |---|---|---|---|
 | `LOOP_RATE` | `ocra_sim_node.py` | 10 Hz | Control loop frequency |
-| `ALPHA` | `ocra_sim_node.py` | 0.67 | Skeleton error weight |
-| `BETA` | `ocra_sim_node.py` | 0.33 | Orientation error weight |
+| `ALPHA` | `ocra_sim_node.py` | 0.67 | Skeleton error weight `α` |
+| `BETA` | `ocra_sim_node.py` | 0.33 | Orientation error weight `β` |
+| `GAMMA` | `ocra_sim_node.py` | — | EE matching weight `γ` (tune per deployment) |
 | `maxiter` (first solve) | `ocra_sim_node.py` | 50 | SLSQP iterations, cold start |
 | `maxiter` (warm start) | `ocra_sim_node.py` | 10 | SLSQP iterations, subsequent |
 | `ftol` | `ocra_sim_node.py` | 1e-4 | Optimizer convergence tolerance |
@@ -186,7 +235,7 @@ Screw axes `S` defined in the base frame. `M_HOME` and `M_ELBOW` are the zero-co
 
 ## Known Limitations
 
-- **IK redundancy** — the optimizer can find kinematically valid but visually unnatural solutions (robot folding on itself) when the target is reached by a contorted configuration. Mitigated by adding an explicit hand↔EE correspondence term to the loss.
+- **IK redundancy** — the optimizer can find kinematically valid but visually unnatural solutions (robot folding on itself) when the target is reached by a contorted configuration. The bidirectional skeleton error `ε_s` alone creates a degenerate local minimum where the robot EE parks near the human elbow rather than the hand. Mitigated by the explicit `ε_ee` term which directly anchors robot EE to human hand position.
 
 - **Workspace boundary** — the RX200 has ~0.4 m reach. Targets outside this range cause the optimizer to slam joints to limits. The node filters skeleton frames where `|hand| > 0.4 m`.
 
