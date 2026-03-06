@@ -17,6 +17,9 @@ setup(
         'jaxlib',    # Required for JAX runtime
         'scipy',     # Required for the SLSQP solver
         'numpy',     # Required for data handling
+        'pyroki',    # Required for robot kinematics
+        'yourdfpy',  # Required for URDF parsing
+        'jaxlie',    # Required for SE(3) math
     ],
     zip_safe=True,
     maintainer='focas',
@@ -32,6 +35,11 @@ setup(
         'console_scripts': [
             'ocra_node = robot_retarget.ocra_node:main',
             'ocra_sim_node = robot_retarget.ocra_sim_node:main',
+            'ocra2_sim_node = robot_retarget.ocra2_sim_node:main',
+            'trajectory_bridge = robot_retarget.trajectory_bridge:main',
+            'fake_human_pub = robot_retarget.fake_skele_pub:main',
+            'robot_hardware_bridge = robot_retarget.robot_hardware_bridge:main',
+            'ocra_addverb = robot_retarget.ocra_addverb:main',
         ],
     },
 )

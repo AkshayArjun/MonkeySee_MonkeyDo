@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OCRA · Heal Cobot Visualizer</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Bebas+Neue&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070809;--panel:#0c0e10;--border:#1a1f26;
+  --human:#00ffcc;--robot:#ff4d1a;--good:#00ff88;--warn:#ffcc00;
+  --ee:#bf7fff;
+  --muted:#3a4450;--text:#8a9bb0;--bright:#c8daea;
+}
+html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetBrains Mono',monospace;overflow:hidden}
+#app{height:100vh;display:grid;grid-template-rows:44px 1fr;grid-template-columns:1fr 300px}
+
+/* Topbar */
+#topbar{grid-column:1/-1;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:18px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:6px;color:var(--human);line-height:1}
+.robot-tag{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:3px;color:var(--muted)}
+.sep{width:1px;height:22px;background:var(--border)}
+.pill{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s}
+.dot.live{background:var(--good);box-shadow:0 0 6px var(--good);animation:blink 2s infinite}
+.dot.warn{background:var(--warn)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.loss-big{margin-left:auto;font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--good);transition:color .3s}
+.loss-big.high{color:var(--warn)}.loss-big.bad{color:var(--robot)}
+.loss-label{font-size:10px;color:var(--muted);margin-right:6px}
+
+/* Viewport */
+#viewport{background:var(--bg);position:relative;overflow:hidden;cursor:grab}
+#viewport:active{cursor:grabbing}
+#c3d{display:block;width:100%;height:100%}
+.view-hint{position:absolute;bottom:12px;left:14px;font-size:10px;color:var(--muted);line-height:1.8;pointer-events:none}
+
+/* Sidebar */
+#sidebar{border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
+.s-section{padding:14px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.s-title{font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+
+/* Connect */
+.connect-row{display:flex;gap:6px}
+#ws-input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--bright);padding:6px 8px;font-family:'JetBrains Mono',monospace;font-size:10px;border-radius:3px;outline:none;transition:border-color .2s}
+#ws-input:focus{border-color:var(--human)}
+#btn-connect{background:var(--human);color:var(--bg);border:none;padding:6px 14px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;border-radius:3px;cursor:pointer;transition:opacity .2s}
+#btn-connect:hover{opacity:.8}
+
+/* Metrics */
+.metric{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border)}
+.metric:last-child{border-bottom:none}
+.m-name{font-size:10px;color:var(--text)}
+.m-val{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px}
+.m-skel{color:var(--human)}.m-ori{color:var(--robot)}.m-ee{color:var(--ee)}.m-tot{color:var(--good);font-size:24px}
+
+/* Joints */
+.j-row{display:grid;grid-template-columns:58px 1fr 46px;align-items:center;gap:8px;margin-bottom:7px}
+.j-name{font-size:9px;color:var(--text)}
+.j-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.j-fill{height:100%;border-radius:2px;background:var(--robot);transition:width .12s ease}
+.j-fill.at-limit{background:#ff2222}
+.j-val{font-size:9px;color:var(--bright);text-align:right}
+
+/* Sparkline */
+#spark-wrap{padding:10px 16px 14px;flex-shrink:0;border-bottom:1px solid var(--border)}
+#spark{display:block;width:100%;height:48px}
+
+.s-scroll{overflow-y:auto;flex:1}
+
+/* Legend */
+.legend{display:flex;gap:14px;flex-wrap:wrap}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text)}
+.leg-line{width:18px;height:3px;border-radius:2px}
+
+/* Tip */
+.tip{margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:9px;color:var(--muted);line-height:1.9}
+.tip code{color:var(--human);background:rgba(0,255,204,.07);padding:1px 4px;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <span class="logo">OCRA</span>
+    <span class="robot-tag">HEAL 6R</span>
+    <div class="sep"></div>
+    <div class="pill"><div class="dot" id="dot"></div><span id="status-txt">disconnected</span></div>
+    <div class="sep"></div>
+    <div class="pill" style="color:var(--human)">■ human</div>
+    <div class="pill" style="color:var(--robot)">■ robot FK</div>
+    <div class="pill" style="color:var(--ee)">■ EE target</div>
+    <div class="loss-big" id="loss-display"><span class="loss-label">LOSS</span>—</div>
+  </div>
+
+  <div id="viewport">
+    <canvas id="c3d"></canvas>
+    <div class="view-hint">drag · rotate<br>scroll · zoom</div>
+  </div>
+
+  <div id="sidebar">
+    <div class="s-section">
+      <div class="s-title">Rosbridge</div>
+      <div class="connect-row">
+        <input id="ws-input" value="ws://localhost:9090" spellcheck="false"/>
+        <button id="btn-connect" onclick="connect()">GO</button>
+      </div>
+      <div class="tip">
+        Start first:<br>
+        <code>ros2 launch rosbridge_server rosbridge_websocket_launch.xml</code>
+      </div>
+    </div>
+    <div class="s-section">
+      <div class="s-title">Error Metrics</div>
+      <div class="metric"><span class="m-name">skeleton ε_s²</span><span class="m-val m-skel" id="m-skel">—</span></div>
+      <div class="metric"><span class="m-name">orientation ε_o²</span><span class="m-val m-ori"  id="m-ori">—</span></div>
+      <div class="metric"><span class="m-name">EE position ε_ee²</span><span class="m-val m-ee"   id="m-ee">—</span></div>
+      <div class="metric"><span class="m-name">total loss</span><span class="m-val m-tot"  id="m-tot">—</span></div>
+    </div>
+    <div id="spark-wrap">
+      <div class="s-title">Loss History</div>
+      <canvas id="spark"></canvas>
+    </div>
+    <div class="s-scroll">
+      <div class="s-section">
+        <div class="s-title">Joint Angles · rad</div>
+        <div id="joint-panel"></div>
+      </div>
+      <div class="s-section">
+        <div class="s-title">Legend</div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-line" style="background:var(--human)"></div>human chain</div>
+          <div class="leg-item"><div class="leg-line" style="background:var(--robot)"></div>robot FK</div>
+          <div class="leg-item"><div class="leg-line" style="background:var(--ee)"></div>EE / hand target</div>
+          <div class="leg-item"><div class="leg-line" style="border:1px dashed #fff3"></div>ε distances</div>
+        </div>
+        <div class="tip" style="margin-top:10px">
+          <b style="color:var(--bright)">EE glow color:</b><br>
+          <span style="color:var(--good)">■ green</span> — loss &lt; 0.01 (good)<br>
+          <span style="color:var(--warn)">■ yellow</span> — loss &lt; 0.05 (ok)<br>
+          <span style="color:var(--robot)">■ red</span> — loss &gt; 0.05 (bad)<br><br>
+          Dashed lines = distances the optimizer minimizes.<br>
+          Purple dot = human hand target (ε_ee reference).
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIG — Heal 6R
+// ══════════════════════════════════════════════════════
+
+// Joint names matching heal_controllers.yaml / ocra2_sim_node.py
+const JNAMES = ['joint1','joint2','joint3','joint4','joint5','joint6'];
+
+// Limits from heal.urdf
+const JLIMITS = [
+  [-3.1416,  3.1416],   // joint1  — revolute about Z
+  [-0.75,    2.05  ],   // joint2  — revolute about -X
+  [-1.0,     1.0   ],   // joint3  — revolute about +X
+  [-3.1416,  3.1416],   // joint4  — revolute about -Y
+  [-3.1416,  3.1416],   // joint5  — revolute about (0.5, 0.866, 0)
+  [-3.1416,  3.1416],   // joint6  — revolute about -Z
+];
+
+// Weights matching ocra2_sim_node.py
+const ALPHA = 0.5, BETA = 0.2, GAMMA = 0.3;
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+const S = {
+  human:  { sh:[0,0,.3], el:[.2,0,.2], ha:[.35,0,.1] },
+  // robot chain: base + link1..link5 + EE  (7 points)
+  robot:  [
+    [0,0,0],       // base_link
+    [0,0,0.346],   // link1 (after joint1 at z=0.346)
+    [0,0,0.651],   // link2 (after joint2, link length 0.305)
+    [0,0,0.651],   // link3 (offset mostly in Y from joint4)
+    [0,0,0.651],   // link4
+    [0,0,0.651],   // link5
+    [0,0,0.651],   // end_effector
+  ],
+  joints: [0,0,0,0,0,0],
+  loss:   { skel:0, ori:0, ee:0, total:0 },
+  hist:   [],
+};
+
+// ══════════════════════════════════════════════════════
+// ROSBRIDGE
+// ══════════════════════════════════════════════════════
+let ws = null;
+
+function setStatus(type, msg) {
+  document.getElementById('dot').className = 'dot ' + type;
+  document.getElementById('status-txt').textContent = msg;
+}
+
+function connect() {
+  const url = document.getElementById('ws-input').value.trim();
+  if (ws) try { ws.close(); } catch(e) {}
+  setStatus('warn','connecting…');
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    setStatus('live','connected');
+    // Updated topics for Heal cobot — no /rx200 namespace
+    [
+      ['/human/skeletal_data',                   'geometry_msgs/PoseArray'],
+      ['/arm_controller/joint_trajectory',        'trajectory_msgs/JointTrajectory'],
+    ].forEach(([topic,type]) => ws.send(JSON.stringify({op:'subscribe',topic,type})));
+  };
+  ws.onclose = () => setStatus('','disconnected');
+  ws.onerror = () => setStatus('warn','error — is rosbridge running?');
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.op === 'publish') onMsg(m.topic, m.msg);
+  };
+}
+
+function onMsg(topic, msg) {
+  if (topic === '/human/skeletal_data' && msg.poses.length >= 3) {
+    S.human.sh = p2a(msg.poses[0]);
+    S.human.el = p2a(msg.poses[1]);
+    S.human.ha = p2a(msg.poses[2]);
+  }
+  if (topic === '/arm_controller/joint_trajectory' && msg.points.length) {
+    // Use last point (pt1 = target) if two-point trajectory from bridge
+    const src = msg.points[msg.points.length - 1];
+    msg.joint_names.forEach((n,i) => {
+      const idx = JNAMES.indexOf(n);
+      if (idx >= 0) S.joints[idx] = src.positions[i];
+    });
+    fkUpdate();
+    uiUpdate();
+  }
+}
+
+const p2a = pose => [pose.position.x, pose.position.y, pose.position.z];
+
+// ══════════════════════════════════════════════════════
+// FK  — Heal 6R, DH-derived chain
+//
+// Joint origins from heal.urdf:
+//   joint1: xyz=0 0 0,       axis=0 0 1   (Z)
+//   joint2: xyz=0 0 0.346,   axis=-1 0 0  (-X)
+//   joint3: xyz=0 0 0.305,   axis=1 0 0   (+X, relative to joint2)
+//   joint4: xyz=-0.0009 0.368 0, axis=0 -1 0 (-Y)
+//   joint5: xyz=0 0 0,       axis=0.5 0.866 0
+//   joint6: xyz=0 0 -0.0975, axis=0 0 -1  (-Z)
+//   EE:     xyz=0 0 0        (fixed after joint6)
+//
+// We compute each link's world position by accumulating transforms.
+// ══════════════════════════════════════════════════════
+
+function mat4_identity() {
+  return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+}
+
+function mat4_mul(A, B) {
+  const R = new Array(16).fill(0);
+  for (let i=0;i<4;i++) for (let j=0;j<4;j++)
+    for (let k=0;k<4;k++) R[i*4+j] += A[i*4+k]*B[k*4+j];
+  return R;
+}
+
+function mat4_translate(tx, ty, tz) {
+  return [1,0,0,tx, 0,1,0,ty, 0,0,1,tz, 0,0,0,1];
+}
+
+// Axis-angle rotation matrix (axis must be unit vector)
+function mat4_rot(ax, ay, az, theta) {
+  const c=Math.cos(theta), s=Math.sin(theta), t=1-c;
+  return [
+    t*ax*ax+c,    t*ax*ay-s*az, t*ax*az+s*ay, 0,
+    t*ax*ay+s*az, t*ay*ay+c,    t*ay*az-s*ax, 0,
+    t*ax*az-s*ay, t*ay*az+s*ax, t*az*az+c,    0,
+    0,            0,            0,             1
+  ];
+}
+
+function transform_point(T, p) {
+  return [
+    T[0]*p[0]+T[1]*p[1]+T[ 2]*p[2]+T[ 3],
+    T[4]*p[0]+T[5]*p[1]+T[ 6]*p[2]+T[ 7],
+    T[8]*p[0]+T[9]*p[1]+T[10]*p[2]+T[11],
+  ];
+}
+
+function fkUpdate() {
+  const q = S.joints;
+  let T = mat4_identity();
+
+  // base_link — world origin
+  S.robot[0] = [0, 0, 0];
+
+  // joint1: at origin, axis Z, rotates the whole arm in yaw
+  T = mat4_mul(T, mat4_rot(0, 0, 1, q[0]));
+  S.robot[1] = transform_point(T, [0, 0, 0]);   // link1 coincides with base after joint1
+
+  // joint2: translate z=0.346, axis -X
+  T = mat4_mul(T, mat4_translate(0, 0, 0.346));
+  S.robot[2] = transform_point(T, [0, 0, 0]);   // link2 base
+  T = mat4_mul(T, mat4_rot(-1, 0, 0, q[1]));
+
+  // joint3: translate z=0.305, axis +X
+  T = mat4_mul(T, mat4_translate(0, 0, 0.305));
+  S.robot[3] = transform_point(T, [0, 0, 0]);   // link3 base
+  T = mat4_mul(T, mat4_rot(1, 0, 0, q[2]));
+
+  // joint4: translate x=-0.0009 y=0.368 z=0, axis -Y
+  T = mat4_mul(T, mat4_translate(-0.0009, 0.368, 0));
+  S.robot[4] = transform_point(T, [0, 0, 0]);   // link4 base
+  T = mat4_mul(T, mat4_rot(0, -1, 0, q[3]));
+
+  // joint5: no translation, axis (0.5, 0.866, 0) — normalize: already unit
+  S.robot[5] = transform_point(T, [0, 0, 0]);   // link5 base
+  T = mat4_mul(T, mat4_rot(0.5, 0.866, 0, q[4]));
+
+  // joint6: translate z=-0.0975, axis -Z
+  T = mat4_mul(T, mat4_translate(0, 0, -0.0975));
+  T = mat4_mul(T, mat4_rot(0, 0, -1, q[5]));
+
+  // end_effector — no further transform
+  S.robot[6] = transform_point(T, [0, 0, 0]);
+}
+
+// ══════════════════════════════════════════════════════
+// GEOMETRY HELPERS
+// ══════════════════════════════════════════════════════
+function d3(a,b){return Math.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2);}
+function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function sub3(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function len3(a){return Math.sqrt(dot3(a,a));}
+
+function ptSeg(p,a,b){
+  const ab=sub3(b,a),ap=sub3(p,a);
+  const t=Math.max(0,Math.min(1,dot3(ap,ab)/(dot3(ab,ab)+1e-9)));
+  return len3(sub3(p,a.map((v,i)=>v+t*ab[i])));
+}
+
+function chainDist(p, chain){
+  let d=Infinity;
+  for(let i=0;i<chain.length-1;i++) d=Math.min(d,ptSeg(p,chain[i],chain[i+1]));
+  return d;
+}
+
+function closestOnChain(p, chain){
+  let best=null,bestD=Infinity;
+  for(let s=0;s<chain.length-1;s++){
+    const a=chain[s],b=chain[s+1];
+    const ab=sub3(b,a),ap=sub3(p,a);
+    const t=Math.max(0,Math.min(1,dot3(ap,ab)/(dot3(ab,ab)+1e-9)));
+    const cp=a.map((v,i)=>v+t*ab[i]);
+    const dd=len3(sub3(p,cp));
+    if(dd<bestD){bestD=dd;best=cp;}
+  }
+  return best;
+}
+
+// ══════════════════════════════════════════════════════
+// LOSS APPROXIMATION
+// Mirrors ocra_loss in ocra_kinematics.py as closely as
+// possible in JS so the display matches what the optimizer sees.
+// ══════════════════════════════════════════════════════
+function lossUpdate(){
+  const h = [S.human.sh, S.human.el, S.human.ha];
+  const r = S.robot;
+
+  // Normalisation length (sum of human + robot chain lengths)
+  let human_ell = d3(h[0],h[1]) + d3(h[1],h[2]);
+  let robot_ell = 0;
+  for(let i=0;i<r.length-1;i++) robot_ell += d3(r[i],r[i+1]);
+  const ell = human_ell + robot_ell + 1e-8;
+
+  // eps_s — skeleton shape error
+  const d_h_elb = chainDist(h[1], r);
+  const d_h_hnd = chainDist(h[2], r);
+  let d_r_sum = 0;
+  for(let i=0;i<r.length;i++) d_r_sum += chainDist(r[i], h);
+  const skel_err = (d_h_elb + d_h_hnd + d_r_sum) / ell;
+
+  // eps_ee — EE position error (robot EE vs human hand)
+  const ee_err = d3(r[r.length-1], h[2]) / ell;
+
+  // eps_o — orientation not computable in JS without quaternion data,
+  //         so we show 0 (the topic doesn't carry quaternion in trajectory msgs)
+  const ori_err = 0;
+
+  S.loss.skel  = skel_err;
+  S.loss.ee    = ee_err;
+  S.loss.ori   = ori_err;
+  S.loss.total = ALPHA*(skel_err**2) + BETA*(ori_err**2) + GAMMA*(ee_err**2);
+  S.hist.push(S.loss.total);
+  if(S.hist.length > 150) S.hist.shift();
+}
+
+// ══════════════════════════════════════════════════════
+// UI UPDATE
+// ══════════════════════════════════════════════════════
+function uiUpdate(){
+  lossUpdate();
+  const L = S.loss.total;
+
+  const ld = document.getElementById('loss-display');
+  ld.innerHTML = `<span class="loss-label">LOSS</span>${L.toFixed(4)}`;
+  ld.className = 'loss-big'+(L>0.05?' bad':L>0.01?' high':'');
+
+  document.getElementById('m-skel').textContent = S.loss.skel.toFixed(4);
+  document.getElementById('m-ori').textContent  = '— (no quat in traj)';
+  document.getElementById('m-ee').textContent   = S.loss.ee.toFixed(4);
+  document.getElementById('m-tot').textContent  = L.toFixed(4);
+
+  // Joint bars — build once, update each tick
+  const panel = document.getElementById('joint-panel');
+  if(!panel.children.length){
+    JNAMES.forEach((n,i)=>{
+      const row=document.createElement('div');row.className='j-row';
+      row.innerHTML=`<span class="j-name">${n}</span>
+        <div class="j-track"><div class="j-fill" id="jf${i}" style="width:50%"></div></div>
+        <span class="j-val" id="jv${i}">0.000</span>`;
+      panel.appendChild(row);
+    });
+  }
+  JNAMES.forEach((_,i)=>{
+    const q=S.joints[i],[lo,hi]=JLIMITS[i];
+    const pct=((q-lo)/(hi-lo))*100;
+    const bar=document.getElementById('jf'+i);
+    if(bar){bar.style.width=Math.max(1,pct)+'%';bar.className='j-fill'+(pct<2||pct>98?' at-limit':'');}
+    const v=document.getElementById('jv'+i);
+    if(v) v.textContent=q.toFixed(3);
+  });
+
+  sparkDraw();
+}
+
+function sparkDraw(){
+  const cv=document.getElementById('spark');
+  const W=cv.offsetWidth,H=cv.offsetHeight;
+  cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
+  const ctx=cv.getContext('2d');ctx.scale(devicePixelRatio,devicePixelRatio);
+  const h=S.hist;if(h.length<2)return;
+  const mx=Math.max(...h,.001);
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath();
+  h.forEach((v,i)=>{const x=(i/(h.length-1))*W,y=H-(v/mx)*(H-4)-2;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.strokeStyle='#00ffcc';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();
+  const g2=ctx.createLinearGradient(0,0,0,H);
+  g2.addColorStop(0,'rgba(0,255,204,.15)');g2.addColorStop(1,'rgba(0,255,204,0)');
+  ctx.fillStyle=g2;ctx.fill();
+}
+
+// ══════════════════════════════════════════════════════
+// 3D CANVAS
+// ══════════════════════════════════════════════════════
+const cv=document.getElementById('c3d'),g3=cv.getContext('2d');
+let cam={az:.7,el:.4,zoom:0};
+let drag=null;
+
+cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,az:cam.az,el:cam.el};});
+window.addEventListener('mousemove',e=>{if(!drag)return;cam.az=drag.az+(e.clientX-drag.x)*.006;cam.el=Math.max(-1.3,Math.min(1.3,drag.el-(e.clientY-drag.y)*.006));});
+window.addEventListener('mouseup',()=>drag=null);
+cv.addEventListener('wheel',e=>{cam.zoom=Math.max(80,Math.min(1400,cam.zoom-e.deltaY*.8));e.preventDefault();},{passive:false});
+
+function initZoom(){cam.zoom=Math.min(cv.offsetWidth,cv.offsetHeight)*.72;}
+
+function proj(p){
+  const[x,y,z]=p;
+  const ca=Math.cos(cam.az),sa=Math.sin(cam.az),ce=Math.cos(cam.el),se=Math.sin(cam.el);
+  const rx=ca*x+sa*y,ry=-sa*x+ca*y,rz=z;
+  const sx=rx, sy=ce*rz+se*ry;
+  const W=cv.width/devicePixelRatio,H=cv.height/devicePixelRatio;
+  return[W/2+sx*cam.zoom,H/2-sy*cam.zoom];
+}
+
+function line3d(a,b,col,lw,dash){
+  const pa=proj(a),pb=proj(b);
+  g3.beginPath();g3.strokeStyle=col;g3.lineWidth=lw;
+  g3.setLineDash(dash||[]);
+  g3.moveTo(pa[0],pa[1]);g3.lineTo(pb[0],pb[1]);g3.stroke();
+  g3.setLineDash([]);
+}
+
+function dot3d(p,r,fill,glow){
+  const pp=proj(p);g3.beginPath();g3.arc(pp[0],pp[1],r,0,Math.PI*2);
+  if(glow){g3.shadowColor=fill;g3.shadowBlur=glow;}
+  g3.fillStyle=fill;g3.fill();g3.shadowBlur=0;
+}
+
+function txt3d(p,t,col){
+  const pp=proj(p);g3.fillStyle=col;g3.font="10px 'JetBrains Mono',monospace";
+  g3.fillText(t,pp[0]+7,pp[1]+4);
+}
+
+function renderFrame(){
+  const W=cv.offsetWidth,H=cv.offsetHeight;
+  cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
+  g3.scale(devicePixelRatio,devicePixelRatio);
+  if(!cam.zoom) initZoom();
+  g3.clearRect(0,0,W,H);
+
+  // Grid
+  for(let i=0;i<=10;i++){
+    const v=-0.5+i*.1;
+    line3d([v,-.001,-.5],[v,-.001,.5],'rgba(26,31,38,.8)',1);
+    line3d([-.5,-.001,v],[.5,-.001,v],'rgba(26,31,38,.8)',1);
+  }
+
+  // Axes
+  [[.15,0,0],'#ff4444','X',[0,.15,0],'#44dd44','Y',[0,0,.15],'#4488ff','Z'].forEach((_,i,a)=>{
+    if(i%3===0){line3d([0,0,0],a[i],a[i+1],1.5);txt3d(a[i],a[i+2],a[i+1]);}
+  });
+
+  const h=[S.human.sh,S.human.el,S.human.ha];
+  const r=S.robot;
+
+  // Distance lines (eps_s distances the optimizer minimizes)
+  [h[1],h[2]].forEach(hp=>{
+    const cp=closestOnChain(hp,r);
+    if(cp) line3d(hp,cp,'rgba(255,255,255,0.15)',1,[4,5]);
+  });
+  r.forEach(rp=>{
+    const cp=closestOnChain(rp,h);
+    if(cp) line3d(rp,cp,'rgba(255,100,50,0.12)',1,[4,5]);
+  });
+
+  // eps_ee line — robot EE to human hand (purple)
+  line3d(r[r.length-1], h[2], 'rgba(191,127,255,0.4)', 1, [3,4]);
+
+  // Human chain
+  for(let i=0;i<h.length-1;i++) line3d(h[i],h[i+1],'#00ffcc',2.5);
+  h.forEach((p,i)=>{dot3d(p,i?4:5,'#00ffcc',12);txt3d(p,['sh','el','ha'][i],'#00ffcc');});
+
+  // Robot chain — draw all 7 links
+  const linkLabels=['base','j1','j2','j3','j4','j5','EE'];
+  for(let i=0;i<r.length-1;i++) line3d(r[i],r[i+1],'#ff4d1a',2.5);
+  r.forEach((p,i)=>{
+    dot3d(p,i===0||i===r.length-1?5:3,'#ff4d1a',i===r.length-1?0:8);
+    if(i===0||i===r.length-1) txt3d(p,linkLabels[i],'#ff4d1a');
+  });
+
+  // Human hand (EE target) — purple dot
+  dot3d(h[2], 6, '#bf7fff', 16);
+
+  // EE glow by loss quality
+  const lc=S.loss.total>0.05?'#ff2222':S.loss.total>0.01?'#ffaa00':'#00ff88';
+  dot3d(r[r.length-1], 9, lc, 28);
+
+  requestAnimationFrame(renderFrame);
+}
+
+// ── Boot ──────────────────────────────
+fkUpdate();uiUpdate();renderFrame();
+setTimeout(connect,500);
+</script>
+</body>
+</html>
