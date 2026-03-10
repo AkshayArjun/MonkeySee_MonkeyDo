@@ -9,6 +9,7 @@
 :root{
   --bg:#070809;--panel:#0c0e10;--border:#1a1f26;
   --human:#00ffcc;--robot:#ff4d1a;--good:#00ff88;--warn:#ffcc00;
+  --hw:#33aaff;--cmd:#ff9f1c;
   --muted:#3a4450;--text:#8a9bb0;--bright:#c8daea;
 }
 html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetBrains Mono',monospace;overflow:hidden}
@@ -26,6 +27,26 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
 .loss-big{margin-left:auto;font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--good);transition:color .3s}
 .loss-big.high{color:var(--warn)}.loss-big.bad{color:var(--robot)}
 .loss-label{font-size:10px;color:var(--muted);margin-right:6px}
+
+/* Mode toggle */
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;flex-shrink:0}
+.mode-btn{background:transparent;border:none;color:var(--muted);font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;padding:5px 12px;cursor:pointer;transition:all .2s}
+.mode-btn.active{background:var(--border);color:var(--bright)}
+.mode-btn:hover:not(.active){color:var(--text)}
+
+/* HW/CMD badges */
+.hw-badge{display:none;align-items:center;gap:6px;font-size:10px;padding:3px 8px;border-radius:3px;border:1px solid var(--hw);color:var(--hw)}
+.hw-badge.visible{display:flex}
+.cmd-badge{display:none;align-items:center;gap:6px;font-size:10px;padding:3px 8px;border-radius:3px;border:1px solid var(--cmd);color:var(--cmd)}
+.cmd-badge.visible{display:flex}
+
+/* Canvas overlay */
+#hw-overlay{position:absolute;top:12px;left:14px;display:none;flex-direction:column;gap:6px;pointer-events:none}
+#hw-overlay.visible{display:flex}
+.hw-stat{font-size:10px;color:var(--text);background:rgba(7,8,9,.7);padding:4px 8px;border-left:2px solid var(--hw);border-radius:0 3px 3px 0}
+.hw-stat span{color:var(--hw);font-weight:700}
+.hw-stat.cmd-stat{border-left-color:var(--cmd)}
+.hw-stat.cmd-stat span{color:var(--cmd)}
 
 /* Viewport */
 #viewport{background:var(--bg);position:relative;overflow:hidden;cursor:grab}
@@ -54,11 +75,23 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
 
 /* Joints */
 .j-row{display:grid;grid-template-columns:78px 1fr 46px;align-items:center;gap:8px;margin-bottom:7px}
+.j-row.hw-mode{grid-template-columns:78px 1fr 44px 1fr 44px}
 .j-name{font-size:9px;color:var(--text)}
 .j-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
 .j-fill{height:100%;border-radius:2px;background:var(--robot);transition:width .12s ease}
+.j-fill.hw{background:var(--hw)}
+.j-fill.cmd{background:var(--cmd)}
 .j-fill.at-limit{background:#ff2222}
 .j-val{font-size:9px;color:var(--bright);text-align:right}
+.j-val.hw-val{color:var(--hw)}
+.j-val.cmd-val{color:var(--cmd)}
+.j-header{display:grid;grid-template-columns:78px 1fr 44px;gap:8px;margin-bottom:4px}
+.j-header.hw-mode{grid-template-columns:78px 1fr 44px 1fr 44px}
+.j-hdr{font-size:8px;letter-spacing:2px;color:var(--muted);text-align:center}
+.j-hdr.left{text-align:left}
+
+/* Legend hw items */
+.leg-hw{display:none}.leg-hw.show{display:flex}
 
 /* Sparkline */
 #spark-wrap{padding:10px 16px 14px;flex-shrink:0;border-bottom:1px solid var(--border)}
@@ -81,15 +114,27 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
   <div id="topbar">
     <span class="logo">OCRA</span>
     <div class="sep"></div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-sim" onclick="setMode('sim')">SIM</button>
+      <button class="mode-btn"        id="btn-hw"  onclick="setMode('hw')">HARDWARE</button>
+    </div>
+    <div class="sep"></div>
     <div class="pill"><div class="dot" id="dot"></div><span id="status-txt">disconnected</span></div>
     <div class="sep"></div>
     <div class="pill" style="color:var(--human)">■ human</div>
     <div class="pill" style="color:var(--robot)">■ robot FK</div>
+    <div class="hw-badge" id="hw-badge">● actual</div>
+    <div class="cmd-badge" id="cmd-badge">● commanded</div>
     <div class="loss-big" id="loss-display"><span class="loss-label">LOSS</span>—</div>
   </div>
 
   <div id="viewport">
     <canvas id="c3d"></canvas>
+    <div id="hw-overlay">
+      <div class="hw-stat">ACTUAL <span id="ov-actual">—</span></div>
+      <div class="hw-stat cmd-stat">CMD <span id="ov-cmd">—</span></div>
+      <div class="hw-stat cmd-stat">MAX Δ <span id="ov-delta">—</span> rad</div>
+    </div>
     <div class="view-hint">drag · rotate<br>scroll · zoom</div>
   </div>
 
@@ -103,6 +148,11 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
       <div class="tip">
         Start first:<br>
         <code>ros2 launch rosbridge_server rosbridge_websocket_launch.xml</code>
+        <div id="hw-tip" style="display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+          HW topics:<br>
+          <code>/rx200/joint_states</code> — actual<br>
+          <code>/ocra/commanded_joints</code> — commanded
+        </div>
       </div>
     </div>
     <div class="s-section">
@@ -118,6 +168,7 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
     <div class="s-scroll">
       <div class="s-section">
         <div class="s-title">Joint Angles · rad</div>
+        <div id="joint-header"></div>
         <div id="joint-panel"></div>
       </div>
       <div class="s-section">
@@ -125,6 +176,8 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
         <div class="legend">
           <div class="leg-item"><div class="leg-line" style="background:var(--human)"></div>human chain</div>
           <div class="leg-item"><div class="leg-line" style="background:var(--robot)"></div>robot FK</div>
+          <div class="leg-item leg-hw" id="leg-actual"><div class="leg-line" style="background:var(--hw)"></div>actual</div>
+          <div class="leg-item leg-hw" id="leg-cmd"><div class="leg-line" style="background:var(--cmd)"></div>commanded</div>
           <div class="leg-item"><div class="leg-line" style="border:1px dashed #fff3"></div>distance ε</div>
         </div>
         <div class="tip" style="margin-top:10px">
@@ -148,11 +201,37 @@ const JLIMITS = [[-3.1416,3.1416],[-1.8849,1.9722],[-1.8849,1.6231],[-1.7453,2.1
 
 const S = {
   human:  { sh:[0,0,.3], el:[.2,0,.2], ha:[.35,0,.1] },
+  // SIM / commanded robot chain
   robot:  { base:[0,0,0], el:[.05,0,.305], ha:[.408,0,.305] },
-  joints: [0,0,0,0,0],
+  // HW actual robot chain (cyan)
+  robotHW:{ base:[0,0,0], el:[.05,0,.305], ha:[.408,0,.305] },
+  joints:        [0,0,0,0,0],  // sim commanded / hw actual
+  jointsCmd:     [0,0,0,0,0],  // hw commanded (from /ocra/commanded_joints)
+  jointsActual:  [0,0,0,0,0],  // hw actual    (from /rx200/joint_states)
   loss:   { skel:0, total:0 },
   hist:   [],
+  hwActualAge: 0,
+  hwCmdAge:    0,
 };
+
+// ══════════════════════════════════════════════════════
+// MODE
+// ══════════════════════════════════════════════════════
+let MODE = 'sim';
+
+function setMode(m) {
+  MODE = m;
+  document.getElementById('btn-sim').classList.toggle('active', m === 'sim');
+  document.getElementById('btn-hw').classList.toggle('active',  m === 'hw');
+  document.getElementById('hw-badge').classList.toggle('visible',  m === 'hw');
+  document.getElementById('cmd-badge').classList.toggle('visible', m === 'hw');
+  document.getElementById('hw-overlay').classList.toggle('visible', m === 'hw');
+  document.getElementById('hw-tip').style.display = m === 'hw' ? '' : 'none';
+  document.getElementById('leg-actual').classList.toggle('show', m === 'hw');
+  document.getElementById('leg-cmd').classList.toggle('show',    m === 'hw');
+  if (ws && ws.readyState === WebSocket.OPEN) resubscribe();
+  rebuildJointPanel();
+}
 
 // ══════════════════════════════════════════════════════
 // ROSBRIDGE
@@ -164,17 +243,33 @@ function setStatus(type, msg) {
   document.getElementById('status-txt').textContent = msg;
 }
 
+const SIM_TOPICS = [
+  ['/human/skeletal_data',           'geometry_msgs/PoseArray'],
+  ['/rx200/commands/joint_group',    'interbotix_xs_msgs/JointGroupCommand'],
+];
+const HW_TOPICS = [
+  ['/human/skeletal_data',           'geometry_msgs/PoseArray'],
+  ['/rx200/joint_states',            'sensor_msgs/JointState'],
+  ['/ocra/commanded_joints',         'sensor_msgs/JointState'],
+];
+
+function resubscribe() {
+  [...SIM_TOPICS, ...HW_TOPICS].forEach(([t]) => {
+    if (ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({op:'unsubscribe', topic:t}));
+  });
+  (MODE === 'hw' ? HW_TOPICS : SIM_TOPICS).forEach(([t,ty]) => {
+    if (ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({op:'subscribe', topic:t, type:ty}));
+  });
+}
+
 function connect() {
   const url = document.getElementById('ws-input').value.trim();
   if (ws) try { ws.close(); } catch(e) {}
   setStatus('warn','connecting…');
   ws = new WebSocket(url);
-  ws.onopen = () => {
-    setStatus('live','connected');
-    [['/human/skeletal_data','geometry_msgs/PoseArray'],
-     ['/rx200/arm_controller/joint_trajectory','trajectory_msgs/JointTrajectory'],
-    ].forEach(([topic,type]) => ws.send(JSON.stringify({op:'subscribe',topic,type})));
-  };
+  ws.onopen = () => { setStatus('live','connected'); resubscribe(); };
   ws.onclose = () => setStatus('','disconnected');
   ws.onerror = () => setStatus('warn','error — is rosbridge running?');
   ws.onmessage = e => {
@@ -184,18 +279,38 @@ function connect() {
 }
 
 function onMsg(topic, msg) {
-  if (topic === '/human/skeletal_data' && msg.poses.length >= 3) {
+  // Human skeleton — both modes
+  if (topic === '/human/skeletal_data' && msg.poses && msg.poses.length >= 3) {
     S.human.sh = p2a(msg.poses[0]);
     S.human.el = p2a(msg.poses[1]);
     S.human.ha = p2a(msg.poses[2]);
   }
-  if (topic === '/rx200/arm_controller/joint_trajectory' && msg.points.length) {
-    msg.joint_names.forEach((n,i) => {
-      const idx = JNAMES.indexOf(n);
-      if (idx >= 0) S.joints[idx] = msg.points[0].positions[i];
-    });
-    fkUpdate();
+
+  // SIM: commanded joint group → drive robot FK
+  if (MODE === 'sim' && topic === '/rx200/commands/joint_group') {
+    JNAMES.forEach((n,i) => { S.joints[i] = msg.cmd[i] ?? 0; });
+    fkUpdate(S.joints, S.robot);
     uiUpdate();
+  }
+
+  // HW: actual joint states → cyan chain
+  if (MODE === 'hw' && topic === '/rx200/joint_states') {
+    const ntp = {};
+    msg.name.forEach((n,i) => ntp[n] = msg.position[i]);
+    JNAMES.forEach((n,i) => { if(ntp[n] !== undefined) S.jointsActual[i] = ntp[n]; });
+    S.hwActualAge = Date.now();
+    S.joints = [...S.jointsActual];
+    fkUpdate(S.joints, S.robot);
+    uiUpdate();
+  }
+
+  // HW: commanded joints from ocra_node → orange dashed chain
+  if (MODE === 'hw' && topic === '/ocra/commanded_joints') {
+    const ntp = {};
+    msg.name.forEach((n,i) => ntp[n] = msg.position[i]);
+    JNAMES.forEach((n,i) => { if(ntp[n] !== undefined) S.jointsCmd[i] = ntp[n]; });
+    S.hwCmdAge = Date.now();
+    fkUpdate(S.jointsCmd, S.robotHW);
   }
 }
 
@@ -240,16 +355,18 @@ function tPos(T){return[T[0][3],T[1][3],T[2][3]];}
 
 function pose4(p){return[[1,0,0,p[0]],[0,1,0,p[1]],[0,0,1,p[2]],[0,0,0,1]];}
 
-function fkUpdate() {
-  const q=S.joints;
+function fkUpdate(q, chain) {
+  if (!q) q = S.joints;
+  if (!chain) chain = S.robot;
   let T=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+  chain.base=[0,0,0];
   T=mm4(T,expSE3(SCREWS[0],q[0]));
   T=mm4(T,expSE3(SCREWS[1],q[1]));
-  S.robot.el=tPos(mm4(T,pose4([.05,0,.30457])));
+  chain.el=tPos(mm4(T,pose4([.05,0,.30457])));
   T=mm4(T,expSE3(SCREWS[2],q[2]));
   T=mm4(T,expSE3(SCREWS[3],q[3]));
   T=mm4(T,expSE3(SCREWS[4],q[4]));
-  S.robot.ha=tPos(mm4(T,pose4([.408575,0,.30457])));
+  chain.ha=tPos(mm4(T,pose4([.408575,0,.30457])));
 }
 
 // ══════════════════════════════════════════════════════
@@ -299,39 +416,83 @@ function lossUpdate(){
 // ══════════════════════════════════════════════════════
 // UI
 // ══════════════════════════════════════════════════════
-function uiUpdate(){
-  lossUpdate();
-  const L=S.loss.total;
+function rebuildJointPanel() {
+  const header = document.getElementById('joint-header');
+  const panel  = document.getElementById('joint-panel');
+  header.innerHTML = '';
+  panel.innerHTML  = '';
 
-  // Topbar loss
-  const ld=document.getElementById('loss-display');
-  ld.innerHTML=`<span class="loss-label">LOSS</span>${L.toFixed(4)}`;
-  ld.className='loss-big'+(L>0.05?' bad':L>0.01?' high':'');
-
-  document.getElementById('m-skel').textContent=S.loss.skel.toFixed(4);
-  document.getElementById('m-ori').textContent='—';
-  document.getElementById('m-tot').textContent=L.toFixed(4);
-
-  // Joints
-  const panel=document.getElementById('joint-panel');
-  if(!panel.children.length){
-    JNAMES.forEach((n,i)=>{
-      const row=document.createElement('div');row.className='j-row';
-      row.innerHTML=`<span class="j-name">${n}</span>
+  if (MODE === 'hw') {
+    const hrow = document.createElement('div');
+    hrow.className = 'j-header hw-mode';
+    hrow.innerHTML = `<div class="j-hdr left">joint</div><div class="j-hdr" style="color:var(--hw)">ACTUAL</div><div></div><div class="j-hdr" style="color:var(--cmd)">CMD</div><div></div>`;
+    header.appendChild(hrow);
+    JNAMES.forEach((n,i) => {
+      const row = document.createElement('div');
+      row.className = 'j-row hw-mode';
+      row.innerHTML = `
+        <span class="j-name">${n}</span>
+        <div class="j-track"><div class="j-fill hw" id="jfa${i}" style="width:50%"></div></div>
+        <span class="j-val hw-val" id="jva${i}">0.000</span>
+        <div class="j-track"><div class="j-fill cmd" id="jfc${i}" style="width:50%"></div></div>
+        <span class="j-val cmd-val" id="jvc${i}">0.000</span>`;
+      panel.appendChild(row);
+    });
+  } else {
+    JNAMES.forEach((n,i) => {
+      const row = document.createElement('div');
+      row.className = 'j-row';
+      row.innerHTML = `<span class="j-name">${n}</span>
         <div class="j-track"><div class="j-fill" id="jf${i}" style="width:50%"></div></div>
         <span class="j-val" id="jv${i}">0.000</span>`;
       panel.appendChild(row);
     });
   }
-  JNAMES.forEach((_,i)=>{
-    const q=S.joints[i],[lo,hi]=JLIMITS[i];
-    const pct=((q-lo)/(hi-lo))*100;
-    const bar=document.getElementById('jf'+i);
-    if(bar){bar.style.width=Math.max(1,pct)+'%';bar.className='j-fill'+(Math.abs(pct)<2||pct>98?' at-limit':'');}
-    const v=document.getElementById('jv'+i);
-    if(v) v.textContent=q.toFixed(3);
-  });
+}
 
+function uiUpdate(){
+  lossUpdate();
+  const L=S.loss.total;
+  const ld=document.getElementById('loss-display');
+  ld.innerHTML=`<span class="loss-label">LOSS</span>${L.toFixed(4)}`;
+  ld.className='loss-big'+(L>0.05?' bad':L>0.01?' high':'');
+  document.getElementById('m-skel').textContent=S.loss.skel.toFixed(4);
+  document.getElementById('m-ori').textContent='—';
+  document.getElementById('m-tot').textContent=L.toFixed(4);
+
+  if (MODE === 'hw') {
+    JNAMES.forEach((_,i) => {
+      const qa=S.jointsActual[i], qc=S.jointsCmd[i];
+      const [lo,hi]=JLIMITS[i];
+      const pctA=((qa-lo)/(hi-lo))*100;
+      const barA=document.getElementById('jfa'+i);
+      if(barA){barA.style.width=Math.max(1,pctA)+'%';barA.className='j-fill hw'+(pctA<2||pctA>98?' at-limit':'');}
+      const vA=document.getElementById('jva'+i);
+      if(vA)vA.textContent=qa.toFixed(3);
+      const pctC=((qc-lo)/(hi-lo))*100;
+      const barC=document.getElementById('jfc'+i);
+      if(barC){barC.style.width=Math.max(1,pctC)+'%';barC.className='j-fill cmd'+(pctC<2||pctC>98?' at-limit':'');}
+      const vC=document.getElementById('jvc'+i);
+      if(vC)vC.textContent=qc.toFixed(3);
+    });
+    // Overlay stats
+    const now=Date.now();
+    document.getElementById('ov-actual').textContent = S.hwActualAge ? ((now-S.hwActualAge)/1000).toFixed(1)+'s ago' : '—';
+    document.getElementById('ov-cmd').textContent    = S.hwCmdAge    ? ((now-S.hwCmdAge)/1000).toFixed(1)+'s ago'    : '—';
+    const maxDelta = Math.max(...JNAMES.map((_,i)=>Math.abs(S.jointsActual[i]-S.jointsCmd[i]))).toFixed(4);
+    document.getElementById('ov-delta').textContent = maxDelta;
+  } else {
+    const panel=document.getElementById('joint-panel');
+    if(!panel.children.length) rebuildJointPanel();
+    JNAMES.forEach((_,i)=>{
+      const q=S.joints[i],[lo,hi]=JLIMITS[i];
+      const pct=((q-lo)/(hi-lo))*100;
+      const bar=document.getElementById('jf'+i);
+      if(bar){bar.style.width=Math.max(1,pct)+'%';bar.className='j-fill'+(Math.abs(pct)<2||pct>98?' at-limit':'');}
+      const v=document.getElementById('jv'+i);
+      if(v) v.textContent=q.toFixed(3);
+    });
+  }
   sparkDraw();
 }
 
@@ -416,7 +577,19 @@ function renderFrame(){
   const h=[S.human.sh,S.human.el,S.human.ha];
   const r=[S.robot.base,S.robot.el,S.robot.ha];
 
-  // Distance lines (what optimizer minimizes)
+  // HW mode: draw commanded chain first (dim orange dashed, behind)
+  if (MODE === 'hw') {
+    const rc=[S.robotHW.base,S.robotHW.el,S.robotHW.ha];
+    line3d(rc[0],rc[1],'rgba(255,159,28,0.35)',2,[4,3]);
+    line3d(rc[1],rc[2],'rgba(255,159,28,0.35)',2,[4,3]);
+    rc.forEach(p => dot3d(p,3,'rgba(255,159,28,0.5)',0));
+    txt3d(rc[2],'cmd','rgba(255,159,28,0.7)');
+    // Delta line between actual EE and commanded EE
+    if (d3(r[2],rc[2]) > 0.005)
+      line3d(r[2],rc[2],'rgba(255,220,80,0.6)',1,[3,3]);
+  }
+
+  // Distance lines
   h.forEach(hp=>{
     const cp=closestOnChain(hp,r);
     if(cp) line3d(hp,cp,'rgba(255,255,255,0.15)',1,[4,5]);
@@ -426,11 +599,12 @@ function renderFrame(){
   line3d(h[0],h[1],'#00ffcc',2.5);line3d(h[1],h[2],'#00ffcc',2.5);
   h.forEach((p,i)=>{dot3d(p,i?4:5,'#00ffcc',12);txt3d(p,['sh','el','ha'][i],'#00ffcc');});
 
-  // Robot chain
-  line3d(r[0],r[1],'#ff4d1a',2.5);line3d(r[1],r[2],'#ff4d1a',2.5);
-  r.forEach((p,i)=>{dot3d(p,i?4:5,'#ff4d1a',12);txt3d(p,['base','el','EE'][i],'#ff4d1a');});
+  // Robot actual chain — cyan in HW mode, orange in SIM
+  const chainCol = MODE === 'hw' ? '#33aaff' : '#ff4d1a';
+  line3d(r[0],r[1],chainCol,2.5);line3d(r[1],r[2],chainCol,2.5);
+  r.forEach((p,i)=>{dot3d(p,i?4:5,chainCol,12);txt3d(p,['base','el','EE'][i],chainCol);});
 
-  // EE glow by loss
+  // EE glow
   const lc=S.loss.total>0.05?'#ff2222':S.loss.total>0.01?'#ffaa00':'#00ff88';
   dot3d(r[2],9,lc,24);
 
@@ -438,7 +612,10 @@ function renderFrame(){
 }
 
 // ── Boot ──────────────────────────────
-fkUpdate();uiUpdate();renderFrame();
+rebuildJointPanel();
+fkUpdate(S.joints, S.robot);
+fkUpdate(S.jointsCmd, S.robotHW);
+uiUpdate();renderFrame();
 setTimeout(connect,500);
 </script>
 </body>

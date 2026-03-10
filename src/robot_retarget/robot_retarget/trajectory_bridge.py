@@ -30,7 +30,7 @@ class TrajectoryBridge(Node):
 
         self.create_subscription(
             JointTrajectory,
-            '/arm_controller/joint_trajectory_raw',
+            '/arm_controller/joint_trajectory',
             self._on_trajectory,
             10
         )
@@ -40,7 +40,7 @@ class TrajectoryBridge(Node):
 
     def _check_server(self):
         if self._action_client.server_is_ready():
-            self.get_logger().info('Action server ready. Bridge active.')
+            self.get_logger().info('Action server ready. Bridge active. yes')
             self._check_timer.cancel()
 
     def _on_trajectory(self, msg: JointTrajectory):

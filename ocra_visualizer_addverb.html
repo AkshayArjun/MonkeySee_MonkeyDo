@@ -9,7 +9,7 @@
 :root{
   --bg:#070809;--panel:#0c0e10;--border:#1a1f26;
   --human:#00ffcc;--robot:#ff4d1a;--good:#00ff88;--warn:#ffcc00;
-  --ee:#bf7fff;
+  --ee:#bf7fff;--hw:#3af;--cmd:#ff9f1c;
   --muted:#3a4450;--text:#8a9bb0;--bright:#c8daea;
 }
 html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetBrains Mono',monospace;overflow:hidden}
@@ -29,11 +29,31 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
 .loss-big.high{color:var(--warn)}.loss-big.bad{color:var(--robot)}
 .loss-label{font-size:10px;color:var(--muted);margin-right:6px}
 
+/* Mode toggle */
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;flex-shrink:0}
+.mode-btn{background:transparent;border:none;color:var(--muted);font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;padding:5px 12px;cursor:pointer;transition:all .2s}
+.mode-btn.active{background:var(--border);color:var(--bright)}
+.mode-btn:hover:not(.active){color:var(--text)}
+
+/* HW badge */
+.hw-badge{display:none;align-items:center;gap:6px;font-size:10px;padding:3px 8px;border-radius:3px;border:1px solid var(--hw);color:var(--hw)}
+.hw-badge.visible{display:flex}
+.cmd-badge{display:none;align-items:center;gap:6px;font-size:10px;padding:3px 8px;border-radius:3px;border:1px solid var(--cmd);color:var(--cmd)}
+.cmd-badge.visible{display:flex}
+
 /* Viewport */
 #viewport{background:var(--bg);position:relative;overflow:hidden;cursor:grab}
 #viewport:active{cursor:grabbing}
 #c3d{display:block;width:100%;height:100%}
 .view-hint{position:absolute;bottom:12px;left:14px;font-size:10px;color:var(--muted);line-height:1.8;pointer-events:none}
+
+/* HW latency badge on canvas */
+#hw-overlay{position:absolute;top:12px;left:14px;display:none;flex-direction:column;gap:6px;pointer-events:none}
+#hw-overlay.visible{display:flex}
+.hw-stat{font-size:10px;color:var(--text);background:rgba(7,8,9,.7);padding:4px 8px;border-left:2px solid var(--hw);border-radius:0 3px 3px 0}
+.hw-stat span{color:var(--hw);font-weight:700}
+.hw-stat.cmd-stat{border-left-color:var(--cmd)}
+.hw-stat.cmd-stat span{color:var(--cmd)}
 
 /* Sidebar */
 #sidebar{border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;overflow:hidden}
@@ -54,13 +74,28 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
 .m-val{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px}
 .m-skel{color:var(--human)}.m-ori{color:var(--robot)}.m-ee{color:var(--ee)}.m-tot{color:var(--good);font-size:24px}
 
-/* Joints */
-.j-row{display:grid;grid-template-columns:58px 1fr 46px;align-items:center;gap:8px;margin-bottom:7px}
+/* Joints — dual columns in HW mode */
+.j-row{display:grid;grid-template-columns:52px 1fr 44px;align-items:center;gap:6px;margin-bottom:7px}
+.j-row.hw-mode{grid-template-columns:52px 1fr 44px 1fr 44px}
 .j-name{font-size:9px;color:var(--text)}
 .j-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
 .j-fill{height:100%;border-radius:2px;background:var(--robot);transition:width .12s ease}
+.j-fill.hw{background:var(--hw)}
+.j-fill.cmd{background:var(--cmd)}
 .j-fill.at-limit{background:#ff2222}
 .j-val{font-size:9px;color:var(--bright);text-align:right}
+.j-val.hw-val{color:var(--hw)}
+.j-val.cmd-val{color:var(--cmd)}
+
+/* Joint header row */
+.j-header{display:grid;grid-template-columns:52px 1fr 44px;gap:6px;margin-bottom:4px}
+.j-header.hw-mode{grid-template-columns:52px 1fr 44px 1fr 44px}
+.j-hdr{font-size:8px;letter-spacing:2px;color:var(--muted);text-align:center}
+.j-hdr.left{text-align:left}
+
+/* Error delta badge */
+.j-delta{font-size:8px;color:var(--warn);text-align:right;display:none}
+.j-delta.show{display:block}
 
 /* Sparkline */
 #spark-wrap{padding:10px 16px 14px;flex-shrink:0;border-bottom:1px solid var(--border)}
@@ -69,13 +104,18 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
 .s-scroll{overflow-y:auto;flex:1}
 
 /* Legend */
-.legend{display:flex;gap:14px;flex-wrap:wrap}
+.legend{display:flex;gap:10px;flex-wrap:wrap}
 .leg-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text)}
 .leg-line{width:18px;height:3px;border-radius:2px}
+.leg-hw{display:none}.leg-hw.show{display:flex}
 
 /* Tip */
 .tip{margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:9px;color:var(--muted);line-height:1.9}
 .tip code{color:var(--human);background:rgba(0,255,204,.07);padding:1px 4px;border-radius:2px}
+
+/* HW topic tip (hidden in SIM) */
+#hw-tip{display:none}
+#hw-tip.show{display:block}
 </style>
 </head>
 <body>
@@ -84,16 +124,35 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
     <span class="logo">OCRA</span>
     <span class="robot-tag">HEAL 6R</span>
     <div class="sep"></div>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-sim" onclick="setMode('sim')">SIM</button>
+      <button class="mode-btn"        id="btn-hw"  onclick="setMode('hw')">HARDWARE</button>
+    </div>
+
+    <div class="sep"></div>
     <div class="pill"><div class="dot" id="dot"></div><span id="status-txt">disconnected</span></div>
     <div class="sep"></div>
     <div class="pill" style="color:var(--human)">■ human</div>
     <div class="pill" style="color:var(--robot)">■ robot FK</div>
     <div class="pill" style="color:var(--ee)">■ EE target</div>
+    <div class="hw-badge" id="hw-badge">● actual</div>
+    <div class="cmd-badge" id="cmd-badge">● commanded</div>
     <div class="loss-big" id="loss-display"><span class="loss-label">LOSS</span>—</div>
   </div>
 
   <div id="viewport">
     <canvas id="c3d"></canvas>
+
+    <!-- HW-only overlay stats -->
+    <div id="hw-overlay">
+      <div class="hw-stat">ACTUAL  <span id="ov-actual">—</span></div>
+      <div class="hw-stat cmd-stat">CMD  <span id="ov-cmd">—</span></div>
+      <div class="hw-stat cmd-stat">MAX Δ  <span id="ov-delta">—</span> rad</div>
+      <div class="hw-stat">GOAL  <span id="ov-goal">—</span></div>
+    </div>
+
     <div class="view-hint">drag · rotate<br>scroll · zoom</div>
   </div>
 
@@ -107,6 +166,11 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
       <div class="tip">
         Start first:<br>
         <code>ros2 launch rosbridge_server rosbridge_websocket_launch.xml</code>
+        <div id="hw-tip" class="show" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+          HW topics:<br>
+          <code>/joint_states</code> — actual<br>
+          <code>/ocra/commanded_joints</code> — commanded
+        </div>
       </div>
     </div>
     <div class="s-section">
@@ -123,6 +187,7 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
     <div class="s-scroll">
       <div class="s-section">
         <div class="s-title">Joint Angles · rad</div>
+        <div id="joint-header"></div>
         <div id="joint-panel"></div>
       </div>
       <div class="s-section">
@@ -131,6 +196,8 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
           <div class="leg-item"><div class="leg-line" style="background:var(--human)"></div>human chain</div>
           <div class="leg-item"><div class="leg-line" style="background:var(--robot)"></div>robot FK</div>
           <div class="leg-item"><div class="leg-line" style="background:var(--ee)"></div>EE / hand target</div>
+          <div class="leg-item leg-hw" id="leg-actual"><div class="leg-line" style="background:var(--hw)"></div>actual joints</div>
+          <div class="leg-item leg-hw" id="leg-cmd"><div class="leg-line" style="background:var(--cmd)"></div>commanded</div>
           <div class="leg-item"><div class="leg-line" style="border:1px dashed #fff3"></div>ε distances</div>
         </div>
         <div class="tip" style="margin-top:10px">
@@ -138,6 +205,12 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
           <span style="color:var(--good)">■ green</span> — loss &lt; 0.01 (good)<br>
           <span style="color:var(--warn)">■ yellow</span> — loss &lt; 0.05 (ok)<br>
           <span style="color:var(--robot)">■ red</span> — loss &gt; 0.05 (bad)<br><br>
+          <b style="color:var(--bright)" id="hw-legend-extra">HW mode:<br>
+          <span style="color:var(--hw)">■ cyan</span> = actual joint state<br>
+          <span style="color:var(--cmd)">■ orange</span> = last commanded goal<br>
+          Orange FK = where robot was told to go.<br>
+          Cyan FK = where robot actually is.<br><br>
+          </b>
           Dashed lines = distances the optimizer minimizes.<br>
           Purple dot = human hand target (ε_ee reference).
         </div>
@@ -150,41 +223,63 @@ html,body{height:100%;background:var(--bg);color:var(--bright);font-family:'JetB
 // ══════════════════════════════════════════════════════
 // CONFIG — Heal 6R
 // ══════════════════════════════════════════════════════
-
-// Joint names matching heal_controllers.yaml / ocra2_sim_node.py
-const JNAMES = ['joint1','joint2','joint3','joint4','joint5','joint6'];
-
-// Limits from heal.urdf
+const JNAMES  = ['joint1','joint2','joint3','joint4','joint5','joint6'];
 const JLIMITS = [
-  [-3.1416,  3.1416],   // joint1  — revolute about Z
-  [-0.75,    2.05  ],   // joint2  — revolute about -X
-  [-1.0,     1.0   ],   // joint3  — revolute about +X
-  [-3.1416,  3.1416],   // joint4  — revolute about -Y
-  [-3.1416,  3.1416],   // joint5  — revolute about (0.5, 0.866, 0)
-  [-3.1416,  3.1416],   // joint6  — revolute about -Z
+  [-3.1416,  3.1416],
+  [-0.75,    2.05  ],
+  [-1.0,     1.0   ],
+  [-3.1416,  3.1416],
+  [-3.1416,  3.1416],
+  [-3.1416,  3.1416],
 ];
-
-// Weights matching ocra2_sim_node.py
 const ALPHA = 0.5, BETA = 0.2, GAMMA = 0.3;
+
+// ══════════════════════════════════════════════════════
+// MODE
+// ══════════════════════════════════════════════════════
+let MODE = 'sim'; // 'sim' | 'hw'
+
+function setMode(m) {
+  MODE = m;
+  document.getElementById('btn-sim').classList.toggle('active', m === 'sim');
+  document.getElementById('btn-hw').classList.toggle('active',  m === 'hw');
+
+  // Topbar badges
+  document.getElementById('hw-badge').classList.toggle('visible',  m === 'hw');
+  document.getElementById('cmd-badge').classList.toggle('visible', m === 'hw');
+
+  // Canvas overlay
+  document.getElementById('hw-overlay').classList.toggle('visible', m === 'hw');
+
+  // Sidebar legend items
+  document.getElementById('leg-actual').classList.toggle('show', m === 'hw');
+  document.getElementById('leg-cmd').classList.toggle('show',    m === 'hw');
+  document.getElementById('hw-legend-extra').style.display = m === 'hw' ? '' : 'none';
+
+  // Reconnect with correct subscriptions
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    resubscribe();
+  }
+
+  // Rebuild joint panel for correct column layout
+  rebuildJointPanel();
+}
 
 // ══════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════
 const S = {
-  human:  { sh:[0,0,.3], el:[.2,0,.2], ha:[.35,0,.1] },
-  // robot chain: base + link1..link5 + EE  (7 points)
-  robot:  [
-    [0,0,0],       // base_link
-    [0,0,0.346],   // link1 (after joint1 at z=0.346)
-    [0,0,0.651],   // link2 (after joint2, link length 0.305)
-    [0,0,0.651],   // link3 (offset mostly in Y from joint4)
-    [0,0,0.651],   // link4
-    [0,0,0.651],   // link5
-    [0,0,0.651],   // end_effector
-  ],
-  joints: [0,0,0,0,0,0],
-  loss:   { skel:0, ori:0, ee:0, total:0 },
-  hist:   [],
+  human:   { sh:[0,0,.3], el:[.2,0,.2], ha:[.35,0,.1] },
+  robot:   [[0,0,0],[0,0,0.346],[0,0,0.651],[0,0,0.651],[0,0,0.651],[0,0,0.651],[0,0,0.651]],
+  robotHW: [[0,0,0],[0,0,0.346],[0,0,0.651],[0,0,0.651],[0,0,0.651],[0,0,0.651],[0,0,0.651]],
+  joints:     [0,0,0,0,0,0],  // commanded (sim) / actual (hw)
+  jointsCmd:  [0,0,0,0,0,0],  // commanded goal (hw only)
+  jointsActual:[0,0,0,0,0,0], // actual joint state (hw only)
+  loss:  { skel:0, ori:0, ee:0, total:0 },
+  hist:  [],
+  hwActualAge: 0,   // ms since last /addverb/joint_states
+  hwCmdAge:    0,   // ms since last commanded goal received
+  goalActive:  false,
 };
 
 // ══════════════════════════════════════════════════════
@@ -204,11 +299,7 @@ function connect() {
   ws = new WebSocket(url);
   ws.onopen = () => {
     setStatus('live','connected');
-    // Updated topics for Heal cobot — no /rx200 namespace
-    [
-      ['/human/skeletal_data',                   'geometry_msgs/PoseArray'],
-      ['/arm_controller/joint_trajectory',        'trajectory_msgs/JointTrajectory'],
-    ].forEach(([topic,type]) => ws.send(JSON.stringify({op:'subscribe',topic,type})));
+    resubscribe();
   };
   ws.onclose = () => setStatus('','disconnected');
   ws.onerror = () => setStatus('warn','error — is rosbridge running?');
@@ -218,111 +309,118 @@ function connect() {
   };
 }
 
+function subscribe(topic, type) {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({op:'subscribe', topic, type}));
+}
+
+function unsubscribe(topic) {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({op:'unsubscribe', topic}));
+}
+
+const SIM_TOPICS = [
+  ['/human/skeletal_data',            'geometry_msgs/PoseArray'],
+  ['/arm_controller/joint_trajectory','trajectory_msgs/JointTrajectory'],
+];
+const HW_TOPICS = [
+  ['/human/skeletal_data',      'geometry_msgs/PoseArray'],
+  ['/joint_states',             'sensor_msgs/JointState'],
+  ['/ocra/commanded_joints',    'sensor_msgs/JointState'],
+];
+
+function resubscribe() {
+  // Unsub everything first
+  [...SIM_TOPICS, ...HW_TOPICS].forEach(([t]) => unsubscribe(t));
+  // Sub to correct set
+  (MODE === 'hw' ? HW_TOPICS : SIM_TOPICS).forEach(([t,ty]) => subscribe(t, ty));
+}
+
 function onMsg(topic, msg) {
-  if (topic === '/human/skeletal_data' && msg.poses.length >= 3) {
+  // ── Human skeleton (both modes) ──
+  if (topic === '/human/skeletal_data' && msg.poses && msg.poses.length >= 3) {
     S.human.sh = p2a(msg.poses[0]);
     S.human.el = p2a(msg.poses[1]);
     S.human.ha = p2a(msg.poses[2]);
   }
-  if (topic === '/arm_controller/joint_trajectory' && msg.points.length) {
-    // Use last point (pt1 = target) if two-point trajectory from bridge
+
+  // ── SIM: commanded trajectory ──
+  if (MODE === 'sim' && topic === '/arm_controller/joint_trajectory' && msg.points && msg.points.length) {
     const src = msg.points[msg.points.length - 1];
     msg.joint_names.forEach((n,i) => {
       const idx = JNAMES.indexOf(n);
       if (idx >= 0) S.joints[idx] = src.positions[i];
     });
-    fkUpdate();
+    fkUpdate(S.joints, S.robot);
     uiUpdate();
+  }
+
+  // ── HW: actual joint states from robot ──
+  if (MODE === 'hw' && topic === '/joint_states') {
+    const nameToPos = {};
+    msg.name.forEach((n,i) => nameToPos[n] = msg.position[i]);
+    JNAMES.forEach((n,i) => {
+      if (nameToPos[n] !== undefined) S.jointsActual[i] = nameToPos[n];
+    });
+    S.hwActualAge = Date.now();
+    // actual joints → primary FK chain (cyan)
+    S.joints = [...S.jointsActual];
+    fkUpdate(S.joints, S.robot);
+    uiUpdate();
+  }
+
+  // ── HW: commanded joints published by ocra_addverb ──
+  if (MODE === 'hw' && topic === '/ocra/commanded_joints') {
+    const nameToPos = {};
+    msg.name.forEach((n,i) => nameToPos[n] = msg.position[i]);
+    JNAMES.forEach((n,i) => {
+      if (nameToPos[n] !== undefined) S.jointsCmd[i] = nameToPos[n];
+    });
+    S.hwCmdAge   = Date.now();
+    S.goalActive = true;
+    fkUpdate(S.jointsCmd, S.robotHW);
   }
 }
 
 const p2a = pose => [pose.position.x, pose.position.y, pose.position.z];
 
 // ══════════════════════════════════════════════════════
-// FK  — Heal 6R, DH-derived chain
-//
-// Joint origins from heal.urdf:
-//   joint1: xyz=0 0 0,       axis=0 0 1   (Z)
-//   joint2: xyz=0 0 0.346,   axis=-1 0 0  (-X)
-//   joint3: xyz=0 0 0.305,   axis=1 0 0   (+X, relative to joint2)
-//   joint4: xyz=-0.0009 0.368 0, axis=0 -1 0 (-Y)
-//   joint5: xyz=0 0 0,       axis=0.5 0.866 0
-//   joint6: xyz=0 0 -0.0975, axis=0 0 -1  (-Z)
-//   EE:     xyz=0 0 0        (fixed after joint6)
-//
-// We compute each link's world position by accumulating transforms.
+// FK — Heal 6R
 // ══════════════════════════════════════════════════════
-
-function mat4_identity() {
-  return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
-}
-
-function mat4_mul(A, B) {
-  const R = new Array(16).fill(0);
-  for (let i=0;i<4;i++) for (let j=0;j<4;j++)
-    for (let k=0;k<4;k++) R[i*4+j] += A[i*4+k]*B[k*4+j];
+function mat4_identity(){return[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];}
+function mat4_mul(A,B){
+  const R=new Array(16).fill(0);
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++)for(let k=0;k<4;k++)R[i*4+j]+=A[i*4+k]*B[k*4+j];
   return R;
 }
-
-function mat4_translate(tx, ty, tz) {
-  return [1,0,0,tx, 0,1,0,ty, 0,0,1,tz, 0,0,0,1];
+function mat4_translate(tx,ty,tz){return[1,0,0,tx,0,1,0,ty,0,0,1,tz,0,0,0,1];}
+function mat4_rot(ax,ay,az,theta){
+  const c=Math.cos(theta),s=Math.sin(theta),t=1-c;
+  return[t*ax*ax+c,t*ax*ay-s*az,t*ax*az+s*ay,0,t*ax*ay+s*az,t*ay*ay+c,t*ay*az-s*ax,0,t*ax*az-s*ay,t*ay*az+s*ax,t*az*az+c,0,0,0,0,1];
+}
+function transform_point(T,p){
+  return[T[0]*p[0]+T[1]*p[1]+T[2]*p[2]+T[3],T[4]*p[0]+T[5]*p[1]+T[6]*p[2]+T[7],T[8]*p[0]+T[9]*p[1]+T[10]*p[2]+T[11]];
 }
 
-// Axis-angle rotation matrix (axis must be unit vector)
-function mat4_rot(ax, ay, az, theta) {
-  const c=Math.cos(theta), s=Math.sin(theta), t=1-c;
-  return [
-    t*ax*ax+c,    t*ax*ay-s*az, t*ax*az+s*ay, 0,
-    t*ax*ay+s*az, t*ay*ay+c,    t*ay*az-s*ax, 0,
-    t*ax*az-s*ay, t*ay*az+s*ax, t*az*az+c,    0,
-    0,            0,            0,             1
-  ];
-}
-
-function transform_point(T, p) {
-  return [
-    T[0]*p[0]+T[1]*p[1]+T[ 2]*p[2]+T[ 3],
-    T[4]*p[0]+T[5]*p[1]+T[ 6]*p[2]+T[ 7],
-    T[8]*p[0]+T[9]*p[1]+T[10]*p[2]+T[11],
-  ];
-}
-
-function fkUpdate() {
-  const q = S.joints;
+function fkUpdate(q, chain) {
   let T = mat4_identity();
-
-  // base_link — world origin
-  S.robot[0] = [0, 0, 0];
-
-  // joint1: at origin, axis Z, rotates the whole arm in yaw
-  T = mat4_mul(T, mat4_rot(0, 0, 1, q[0]));
-  S.robot[1] = transform_point(T, [0, 0, 0]);   // link1 coincides with base after joint1
-
-  // joint2: translate z=0.346, axis -X
-  T = mat4_mul(T, mat4_translate(0, 0, 0.346));
-  S.robot[2] = transform_point(T, [0, 0, 0]);   // link2 base
-  T = mat4_mul(T, mat4_rot(-1, 0, 0, q[1]));
-
-  // joint3: translate z=0.305, axis +X
-  T = mat4_mul(T, mat4_translate(0, 0, 0.305));
-  S.robot[3] = transform_point(T, [0, 0, 0]);   // link3 base
-  T = mat4_mul(T, mat4_rot(1, 0, 0, q[2]));
-
-  // joint4: translate x=-0.0009 y=0.368 z=0, axis -Y
-  T = mat4_mul(T, mat4_translate(-0.0009, 0.368, 0));
-  S.robot[4] = transform_point(T, [0, 0, 0]);   // link4 base
-  T = mat4_mul(T, mat4_rot(0, -1, 0, q[3]));
-
-  // joint5: no translation, axis (0.5, 0.866, 0) — normalize: already unit
-  S.robot[5] = transform_point(T, [0, 0, 0]);   // link5 base
-  T = mat4_mul(T, mat4_rot(0.5, 0.866, 0, q[4]));
-
-  // joint6: translate z=-0.0975, axis -Z
-  T = mat4_mul(T, mat4_translate(0, 0, -0.0975));
-  T = mat4_mul(T, mat4_rot(0, 0, -1, q[5]));
-
-  // end_effector — no further transform
-  S.robot[6] = transform_point(T, [0, 0, 0]);
+  chain[0] = [0,0,0];
+  T = mat4_mul(T, mat4_rot(0,0,1,q[0]));
+  chain[1] = transform_point(T,[0,0,0]);
+  T = mat4_mul(T, mat4_translate(0,0,0.346));
+  chain[2] = transform_point(T,[0,0,0]);
+  T = mat4_mul(T, mat4_rot(-1,0,0,q[1]));
+  T = mat4_mul(T, mat4_translate(0,0,0.305));
+  chain[3] = transform_point(T,[0,0,0]);
+  T = mat4_mul(T, mat4_rot(1,0,0,q[2]));
+  T = mat4_mul(T, mat4_translate(-0.0009,0.368,0));
+  chain[4] = transform_point(T,[0,0,0]);
+  T = mat4_mul(T, mat4_rot(0,-1,0,q[3]));
+  chain[5] = transform_point(T,[0,0,0]);
+  T = mat4_mul(T, mat4_rot(0.5,0.866,0,q[4]));
+  T = mat4_mul(T, mat4_translate(0,0,-0.0975));
+  T = mat4_mul(T, mat4_rot(0,0,-1,q[5]));
+  chain[6] = transform_point(T,[0,0,0]);
 }
 
 // ══════════════════════════════════════════════════════
@@ -332,104 +430,127 @@ function d3(a,b){return Math.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2);
 function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
 function sub3(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
 function len3(a){return Math.sqrt(dot3(a,a));}
-
-function ptSeg(p,a,b){
-  const ab=sub3(b,a),ap=sub3(p,a);
-  const t=Math.max(0,Math.min(1,dot3(ap,ab)/(dot3(ab,ab)+1e-9)));
-  return len3(sub3(p,a.map((v,i)=>v+t*ab[i])));
-}
-
-function chainDist(p, chain){
-  let d=Infinity;
-  for(let i=0;i<chain.length-1;i++) d=Math.min(d,ptSeg(p,chain[i],chain[i+1]));
-  return d;
-}
-
-function closestOnChain(p, chain){
+function ptSeg(p,a,b){const ab=sub3(b,a),ap=sub3(p,a);const t=Math.max(0,Math.min(1,dot3(ap,ab)/(dot3(ab,ab)+1e-9)));return len3(sub3(p,a.map((v,i)=>v+t*ab[i])));}
+function chainDist(p,chain){let d=Infinity;for(let i=0;i<chain.length-1;i++)d=Math.min(d,ptSeg(p,chain[i],chain[i+1]));return d;}
+function closestOnChain(p,chain){
   let best=null,bestD=Infinity;
-  for(let s=0;s<chain.length-1;s++){
-    const a=chain[s],b=chain[s+1];
-    const ab=sub3(b,a),ap=sub3(p,a);
-    const t=Math.max(0,Math.min(1,dot3(ap,ab)/(dot3(ab,ab)+1e-9)));
-    const cp=a.map((v,i)=>v+t*ab[i]);
-    const dd=len3(sub3(p,cp));
-    if(dd<bestD){bestD=dd;best=cp;}
-  }
+  for(let s=0;s<chain.length-1;s++){const a=chain[s],b=chain[s+1];const ab=sub3(b,a),ap=sub3(p,a);const t=Math.max(0,Math.min(1,dot3(ap,ab)/(dot3(ab,ab)+1e-9)));const cp=a.map((v,i)=>v+t*ab[i]);const dd=len3(sub3(p,cp));if(dd<bestD){bestD=dd;best=cp;}}
   return best;
 }
 
 // ══════════════════════════════════════════════════════
-// LOSS APPROXIMATION
-// Mirrors ocra_loss in ocra_kinematics.py as closely as
-// possible in JS so the display matches what the optimizer sees.
+// LOSS
 // ══════════════════════════════════════════════════════
 function lossUpdate(){
-  const h = [S.human.sh, S.human.el, S.human.ha];
-  const r = S.robot;
-
-  // Normalisation length (sum of human + robot chain lengths)
-  let human_ell = d3(h[0],h[1]) + d3(h[1],h[2]);
-  let robot_ell = 0;
-  for(let i=0;i<r.length-1;i++) robot_ell += d3(r[i],r[i+1]);
-  const ell = human_ell + robot_ell + 1e-8;
-
-  // eps_s — skeleton shape error
-  const d_h_elb = chainDist(h[1], r);
-  const d_h_hnd = chainDist(h[2], r);
-  let d_r_sum = 0;
-  for(let i=0;i<r.length;i++) d_r_sum += chainDist(r[i], h);
-  const skel_err = (d_h_elb + d_h_hnd + d_r_sum) / ell;
-
-  // eps_ee — EE position error (robot EE vs human hand)
-  const ee_err = d3(r[r.length-1], h[2]) / ell;
-
-  // eps_o — orientation not computable in JS without quaternion data,
-  //         so we show 0 (the topic doesn't carry quaternion in trajectory msgs)
-  const ori_err = 0;
-
-  S.loss.skel  = skel_err;
-  S.loss.ee    = ee_err;
-  S.loss.ori   = ori_err;
-  S.loss.total = ALPHA*(skel_err**2) + BETA*(ori_err**2) + GAMMA*(ee_err**2);
+  const h=[S.human.sh,S.human.el,S.human.ha];
+  // In HW mode, loss is computed against actual joints (S.robot)
+  const r=S.robot;
+  let human_ell=d3(h[0],h[1])+d3(h[1],h[2]);
+  let robot_ell=0;
+  for(let i=0;i<r.length-1;i++)robot_ell+=d3(r[i],r[i+1]);
+  const ell=human_ell+robot_ell+1e-8;
+  const d_h_elb=chainDist(h[1],r),d_h_hnd=chainDist(h[2],r);
+  let d_r_sum=0;
+  for(let i=0;i<r.length;i++)d_r_sum+=chainDist(r[i],h);
+  const skel_err=(d_h_elb+d_h_hnd+d_r_sum)/ell;
+  const ee_err=d3(r[r.length-1],h[2])/ell;
+  S.loss.skel=skel_err;S.loss.ee=ee_err;S.loss.ori=0;
+  S.loss.total=ALPHA*(skel_err**2)+BETA*(0)+GAMMA*(ee_err**2);
   S.hist.push(S.loss.total);
-  if(S.hist.length > 150) S.hist.shift();
+  if(S.hist.length>150)S.hist.shift();
 }
 
 // ══════════════════════════════════════════════════════
 // UI UPDATE
 // ══════════════════════════════════════════════════════
-function uiUpdate(){
-  lossUpdate();
-  const L = S.loss.total;
+function rebuildJointPanel() {
+  const header = document.getElementById('joint-header');
+  const panel  = document.getElementById('joint-panel');
+  header.innerHTML = '';
+  panel.innerHTML  = '';
 
-  const ld = document.getElementById('loss-display');
-  ld.innerHTML = `<span class="loss-label">LOSS</span>${L.toFixed(4)}`;
-  ld.className = 'loss-big'+(L>0.05?' bad':L>0.01?' high':'');
+  if (MODE === 'hw') {
+    const hrow = document.createElement('div');
+    hrow.className = 'j-header hw-mode';
+    hrow.innerHTML = `<div class="j-hdr left">joint</div><div class="j-hdr" style="color:var(--hw)">ACTUAL</div><div></div><div class="j-hdr" style="color:var(--cmd)">CMD</div><div></div>`;
+    header.appendChild(hrow);
 
-  document.getElementById('m-skel').textContent = S.loss.skel.toFixed(4);
-  document.getElementById('m-ori').textContent  = '— (no quat in traj)';
-  document.getElementById('m-ee').textContent   = S.loss.ee.toFixed(4);
-  document.getElementById('m-tot').textContent  = L.toFixed(4);
-
-  // Joint bars — build once, update each tick
-  const panel = document.getElementById('joint-panel');
-  if(!panel.children.length){
-    JNAMES.forEach((n,i)=>{
-      const row=document.createElement('div');row.className='j-row';
-      row.innerHTML=`<span class="j-name">${n}</span>
+    JNAMES.forEach((n,i) => {
+      const row = document.createElement('div');
+      row.className = 'j-row hw-mode';
+      row.innerHTML = `
+        <span class="j-name">${n}</span>
+        <div class="j-track"><div class="j-fill hw" id="jfa${i}" style="width:50%"></div></div>
+        <span class="j-val hw-val" id="jva${i}">0.000</span>
+        <div class="j-track"><div class="j-fill cmd" id="jfc${i}" style="width:50%"></div></div>
+        <span class="j-val cmd-val" id="jvc${i}">0.000</span>`;
+      panel.appendChild(row);
+    });
+  } else {
+    JNAMES.forEach((n,i) => {
+      const row = document.createElement('div');
+      row.className = 'j-row';
+      row.innerHTML = `
+        <span class="j-name">${n}</span>
         <div class="j-track"><div class="j-fill" id="jf${i}" style="width:50%"></div></div>
         <span class="j-val" id="jv${i}">0.000</span>`;
       panel.appendChild(row);
     });
   }
-  JNAMES.forEach((_,i)=>{
-    const q=S.joints[i],[lo,hi]=JLIMITS[i];
-    const pct=((q-lo)/(hi-lo))*100;
-    const bar=document.getElementById('jf'+i);
-    if(bar){bar.style.width=Math.max(1,pct)+'%';bar.className='j-fill'+(pct<2||pct>98?' at-limit':'');}
-    const v=document.getElementById('jv'+i);
-    if(v) v.textContent=q.toFixed(3);
-  });
+}
+
+function uiUpdate(){
+  lossUpdate();
+  const L=S.loss.total;
+  const ld=document.getElementById('loss-display');
+  ld.innerHTML=`<span class="loss-label">LOSS</span>${L.toFixed(4)}`;
+  ld.className='loss-big'+(L>0.05?' bad':L>0.01?' high':'');
+
+  document.getElementById('m-skel').textContent=S.loss.skel.toFixed(4);
+  document.getElementById('m-ori').textContent='— (no quat in traj)';
+  document.getElementById('m-ee').textContent=S.loss.ee.toFixed(4);
+  document.getElementById('m-tot').textContent=L.toFixed(4);
+
+  if (MODE === 'hw') {
+    // Dual column: actual + commanded
+    JNAMES.forEach((_,i) => {
+      const qa=S.jointsActual[i], qc=S.jointsCmd[i];
+      const [lo,hi]=JLIMITS[i];
+
+      const pctA=((qa-lo)/(hi-lo))*100;
+      const barA=document.getElementById('jfa'+i);
+      if(barA){barA.style.width=Math.max(1,pctA)+'%';barA.className='j-fill hw'+(pctA<2||pctA>98?' at-limit':'');}
+      const vA=document.getElementById('jva'+i);
+      if(vA)vA.textContent=qa.toFixed(3);
+
+      const pctC=((qc-lo)/(hi-lo))*100;
+      const barC=document.getElementById('jfc'+i);
+      if(barC){barC.style.width=Math.max(1,pctC)+'%';barC.className='j-fill cmd'+(pctC<2||pctC>98?' at-limit':'');}
+      const vC=document.getElementById('jvc'+i);
+      if(vC)vC.textContent=qc.toFixed(3);
+    });
+
+    // Overlay stats
+    const now=Date.now();
+    const actualAge=S.hwActualAge ? ((now-S.hwActualAge)/1000).toFixed(1)+'s ago' : '—';
+    const cmdAge=S.hwCmdAge ? ((now-S.hwCmdAge)/1000).toFixed(1)+'s ago' : '—';
+    const maxDelta=Math.max(...JNAMES.map((_,i)=>Math.abs(S.jointsActual[i]-S.jointsCmd[i]))).toFixed(4);
+    document.getElementById('ov-actual').textContent=actualAge;
+    document.getElementById('ov-cmd').textContent=cmdAge;
+    document.getElementById('ov-delta').textContent=maxDelta;
+    document.getElementById('ov-goal').textContent=S.goalActive?'EXECUTING':'idle';
+
+  } else {
+    // Single column: commanded joints
+    JNAMES.forEach((_,i)=>{
+      const q=S.joints[i],[lo,hi]=JLIMITS[i];
+      const pct=((q-lo)/(hi-lo))*100;
+      const bar=document.getElementById('jf'+i);
+      if(bar){bar.style.width=Math.max(1,pct)+'%';bar.className='j-fill'+(pct<2||pct>98?' at-limit':'');}
+      const v=document.getElementById('jv'+i);
+      if(v)v.textContent=q.toFixed(3);
+    });
+  }
 
   sparkDraw();
 }
@@ -462,14 +583,13 @@ cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,az:cam.az,el:c
 window.addEventListener('mousemove',e=>{if(!drag)return;cam.az=drag.az+(e.clientX-drag.x)*.006;cam.el=Math.max(-1.3,Math.min(1.3,drag.el-(e.clientY-drag.y)*.006));});
 window.addEventListener('mouseup',()=>drag=null);
 cv.addEventListener('wheel',e=>{cam.zoom=Math.max(80,Math.min(1400,cam.zoom-e.deltaY*.8));e.preventDefault();},{passive:false});
-
 function initZoom(){cam.zoom=Math.min(cv.offsetWidth,cv.offsetHeight)*.72;}
 
 function proj(p){
   const[x,y,z]=p;
   const ca=Math.cos(cam.az),sa=Math.sin(cam.az),ce=Math.cos(cam.el),se=Math.sin(cam.el);
-  const rx=ca*x+sa*y,ry=-sa*x+ca*y,rz=z;
-  const sx=rx, sy=ce*rz+se*ry;
+  const rx=ca*x+sa*y,ry=-sa*x+ca*y;
+  const sx=rx,sy=ce*z+se*ry;
   const W=cv.width/devicePixelRatio,H=cv.height/devicePixelRatio;
   return[W/2+sx*cam.zoom,H/2-sy*cam.zoom];
 }
@@ -481,13 +601,11 @@ function line3d(a,b,col,lw,dash){
   g3.moveTo(pa[0],pa[1]);g3.lineTo(pb[0],pb[1]);g3.stroke();
   g3.setLineDash([]);
 }
-
 function dot3d(p,r,fill,glow){
   const pp=proj(p);g3.beginPath();g3.arc(pp[0],pp[1],r,0,Math.PI*2);
   if(glow){g3.shadowColor=fill;g3.shadowBlur=glow;}
   g3.fillStyle=fill;g3.fill();g3.shadowBlur=0;
 }
-
 function txt3d(p,t,col){
   const pp=proj(p);g3.fillStyle=col;g3.font="10px 'JetBrains Mono',monospace";
   g3.fillText(t,pp[0]+7,pp[1]+4);
@@ -497,7 +615,7 @@ function renderFrame(){
   const W=cv.offsetWidth,H=cv.offsetHeight;
   cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;
   g3.scale(devicePixelRatio,devicePixelRatio);
-  if(!cam.zoom) initZoom();
+  if(!cam.zoom)initZoom();
   g3.clearRect(0,0,W,H);
 
   // Grid
@@ -513,46 +631,69 @@ function renderFrame(){
   });
 
   const h=[S.human.sh,S.human.el,S.human.ha];
-  const r=S.robot;
+  const r=S.robot; // actual (or sim commanded)
 
-  // Distance lines (eps_s distances the optimizer minimizes)
+  // ── HW mode: draw commanded FK chain first (dim orange, behind) ──
+  if (MODE === 'hw') {
+    const rc=S.robotHW;
+    for(let i=0;i<rc.length-1;i++) line3d(rc[i],rc[i+1],'rgba(255,159,28,0.35)',2,[4,3]);
+    rc.forEach((p,i)=>{
+      dot3d(p, i===rc.length-1?7:3, 'rgba(255,159,28,0.5)', 0);
+    });
+    // EE commanded position label
+    txt3d(rc[rc.length-1],'cmd','rgba(255,159,28,0.7)');
+
+    // Delta line between actual EE and commanded EE
+    const eeActual=r[r.length-1], eeCmd=rc[rc.length-1];
+    const dEE=d3(eeActual, eeCmd);
+    if(dEE > 0.005) {
+      line3d(eeActual, eeCmd, 'rgba(255,220,80,0.6)', 1, [3,3]);
+    }
+  }
+
+  // Distance error lines
   [h[1],h[2]].forEach(hp=>{
     const cp=closestOnChain(hp,r);
-    if(cp) line3d(hp,cp,'rgba(255,255,255,0.15)',1,[4,5]);
+    if(cp)line3d(hp,cp,'rgba(255,255,255,0.15)',1,[4,5]);
   });
   r.forEach(rp=>{
     const cp=closestOnChain(rp,h);
-    if(cp) line3d(rp,cp,'rgba(255,100,50,0.12)',1,[4,5]);
+    if(cp)line3d(rp,cp,'rgba(255,100,50,0.12)',1,[4,5]);
   });
 
-  // eps_ee line — robot EE to human hand (purple)
-  line3d(r[r.length-1], h[2], 'rgba(191,127,255,0.4)', 1, [3,4]);
+  // eps_ee line
+  line3d(r[r.length-1],h[2],'rgba(191,127,255,0.4)',1,[3,4]);
 
   // Human chain
-  for(let i=0;i<h.length-1;i++) line3d(h[i],h[i+1],'#00ffcc',2.5);
+  for(let i=0;i<h.length-1;i++)line3d(h[i],h[i+1],'#00ffcc',2.5);
   h.forEach((p,i)=>{dot3d(p,i?4:5,'#00ffcc',12);txt3d(p,['sh','el','ha'][i],'#00ffcc');});
 
-  // Robot chain — draw all 7 links
+  // Robot actual chain
+  const chainColor = MODE === 'hw' ? '#33aaff' : '#ff4d1a';
   const linkLabels=['base','j1','j2','j3','j4','j5','EE'];
-  for(let i=0;i<r.length-1;i++) line3d(r[i],r[i+1],'#ff4d1a',2.5);
+  for(let i=0;i<r.length-1;i++)line3d(r[i],r[i+1],chainColor,2.5);
   r.forEach((p,i)=>{
-    dot3d(p,i===0||i===r.length-1?5:3,'#ff4d1a',i===r.length-1?0:8);
-    if(i===0||i===r.length-1) txt3d(p,linkLabels[i],'#ff4d1a');
+    dot3d(p,i===0||i===r.length-1?5:3,chainColor,i===r.length-1?0:8);
+    if(i===0||i===r.length-1)txt3d(p,linkLabels[i],chainColor);
   });
 
-  // Human hand (EE target) — purple dot
-  dot3d(h[2], 6, '#bf7fff', 16);
+  // Human hand purple dot
+  dot3d(h[2],6,'#bf7fff',16);
 
-  // EE glow by loss quality
+  // EE glow
   const lc=S.loss.total>0.05?'#ff2222':S.loss.total>0.01?'#ffaa00':'#00ff88';
-  dot3d(r[r.length-1], 9, lc, 28);
+  dot3d(r[r.length-1],9,lc,28);
 
   requestAnimationFrame(renderFrame);
 }
 
-// ── Boot ──────────────────────────────
-fkUpdate();uiUpdate();renderFrame();
-setTimeout(connect,500);
+// ── Boot ──
+rebuildJointPanel();
+fkUpdate(S.joints, S.robot);
+fkUpdate(S.jointsCmd, S.robotHW);
+uiUpdate();
+renderFrame();
+setTimeout(connect, 500);
 </script>
 </body>
 </html>

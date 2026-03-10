@@ -39,7 +39,7 @@ class OCRA2SimNode(Node):
 
         # Publish to _raw — bridge picks this up and forwards via action server
         self.cmd_pub = self.create_publisher(
-            JointTrajectory, '/arm_controller/joint_trajectory_raw', 10)
+            JointTrajectory, '/arm_controller/joint_trajectory', 10)
 
         self._lock              = threading.Lock()
         self.current_joints     = np.zeros(N_JOINTS)

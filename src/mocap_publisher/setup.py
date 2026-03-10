@@ -22,7 +22,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mocap_pub_node = mocap_publisher.mocap_pub:main',
+            'human_pub = mocap_publisher.camera_tracker.py:main',
         ],
     },
 )
