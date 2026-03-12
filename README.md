@@ -245,7 +245,7 @@ pip install jax jaxlib scipy numpy
 install from source
 
 # Camera tracker only
-pip install depthai mediapipe --break-system-packages
+pip install depthai mediapipe
 ```
 
 ---
