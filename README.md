@@ -325,7 +325,9 @@ No FK code changes are required.
 
 ## Demo 
 
-#### click here for the demo run [video](media/MSMD.mp4)
+<div align="center">
+  <video src="https://github.com/AkshayArjun/MonkeySee_MonkeyDo/raw/master/media/demonstration.mp4" width="100%" controls></video>
+</div>
 
 
 
